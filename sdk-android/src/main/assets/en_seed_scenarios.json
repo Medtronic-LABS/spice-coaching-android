@@ -1,0 +1,526 @@
+{
+  "scenarios": [
+    {
+      "scenario_id": "htn_threshold",
+      "version": 1,
+      "schema_version": 1,
+      "clinical_domain": "hypertension",
+      "action_type": "protocol_clarification",
+      "validated": true,
+      "source_doc": "Bangladesh NCD Guidelines 2023",
+      "source_page": 14,
+      "key_points": [
+        "Normal BP: below 120/80 mmHg",
+        "Elevated BP: 120–129 / below 80 mmHg",
+        "Hypertension Stage 1: 130–139 / 80–89 mmHg",
+        "Hypertension Stage 2: 140/90 mmHg or higher",
+        "Hypertensive Crisis: above 180/120 mmHg — refer immediately"
+      ],
+      "sop_excerpt_en": "Bangladesh NCD referral guidelines: CHW should refer any patient with BP >= 140/90 to Upazila Health Complex. Pregnancy with BP >= 140/90 with symptoms is a hypertensive emergency requiring immediate referral.",
+      "referral_threshold": {
+        "condition": "BP >= 140/90 mmHg",
+        "destination": "UHC"
+      },
+      "danger_signs": [
+        "Severe headache",
+        "Blurred vision",
+        "Chest pain",
+        "Difficulty breathing"
+      ],
+      "bangla_card": {
+        "title": "Blood Pressure Levels and Referral",
+        "body": "Normal: below 120/80\nStage 1: 130–139 / 80–89\nStage 2: 140/90 or higher\nCrisis: above 180/120 — refer immediately",
+        "warning_signs_bangla": ["Severe headache", "Blurred vision", "Chest pain", "Difficulty breathing"],
+        "next_step": "If BP is 140/90 or higher, refer to the Upazila Health Complex",
+        "referral_destination": "Upazila Health Complex"
+      },
+      "trigger_conditions": [
+        {"event": "assessment_completed", "condition": "bp_stage2_or_higher"}
+      ],
+      "quiz_ids": ["q_htn_1", "q_htn_2", "q_htn_3"]
+    },
+    {
+      "scenario_id": "htn_counsel",
+      "version": 1,
+      "schema_version": 1,
+      "clinical_domain": "hypertension",
+      "action_type": "counselling",
+      "validated": true,
+      "source_doc": "Bangladesh NCD Guidelines 2023",
+      "source_page": 22,
+      "key_points": [
+        "Advise low-salt diet — less than 5 g salt per day",
+        "Encourage daily walking or moderate activity for 30 minutes",
+        "If prescribed medication, stress that it must be taken daily — even when feeling well",
+        "Avoid tobacco and alcohol",
+        "Weight reduction helps: every 5 kg lost lowers BP by about 5 mmHg",
+        "Refer if BP ≥ 140/90 at follow-up despite lifestyle advice"
+      ],
+      "sop_excerpt_en": "Lifestyle modification is the first-line intervention for Stage 1 hypertension. Medication adherence counselling is critical — CHW should use teach-back to confirm understanding.",
+      "referral_threshold": {
+        "condition": "BP >= 140/90 after lifestyle counselling",
+        "destination": "UHC"
+      },
+      "danger_signs": [
+        "Severe headache",
+        "Blurred vision",
+        "Chest pain"
+      ],
+      "bangla_card": {
+        "title": "Counselling: High Blood Pressure",
+        "body": "1. Less salt in food — less than 5 g per day\n2. Walk 30 minutes every day\n3. Take medicine every day if prescribed — do not skip\n4. Do not smoke or drink alcohol\n5. Weight loss helps lower blood pressure",
+        "warning_signs_bangla": ["Severe headache", "Blurred vision", "Chest pain"],
+        "next_step": "If BP is still 140/90 at next visit, refer to the Upazila Health Complex",
+        "referral_destination": "Upazila Health Complex"
+      },
+      "trigger_conditions": [
+        {"event": "assessment_completed", "condition": "bp_stage1"},
+        {"event": "morning_open", "condition": "gap_type_skill_application_htn"}
+      ],
+      "quiz_ids": ["q_htn_c1", "q_htn_c2"]
+    },
+    {
+      "scenario_id": "htn_medication",
+      "version": 1,
+      "schema_version": 1,
+      "clinical_domain": "hypertension",
+      "action_type": "counselling",
+      "validated": true,
+      "source_doc": "Bangladesh NCD Guidelines 2023",
+      "source_page": 30,
+      "key_points": [
+        "Antihypertensive medication must be taken every day, even when blood pressure feels normal",
+        "Stopping medication without doctor advice can cause BP to spike",
+        "Common side effects: dizziness when standing — advise to stand up slowly",
+        "If patient misses a dose, take as soon as remembered — do not double dose",
+        "Keep a pill calendar to track daily intake"
+      ],
+      "sop_excerpt_en": "Medication adherence is the leading cause of uncontrolled hypertension in community patients. Teach-back with pill calendar demonstration increases adherence.",
+      "referral_threshold": null,
+      "danger_signs": [],
+      "bangla_card": {
+        "title": "Taking BP Medicine Every Day",
+        "body": "• Take your BP medicine every day — even when you feel well\n• Do not stop medicine without asking your doctor\n• If dizzy when standing, stand up slowly\n• If you miss a dose, take it as soon as you remember\n• Use a calendar to track your medicine",
+        "warning_signs_bangla": [],
+        "next_step": "Check if patient has their medicine and how many days' supply remain",
+        "referral_destination": "none"
+      },
+      "trigger_conditions": [
+        {"event": "morning_open", "condition": "gap_type_knowledge_htn_medication"}
+      ],
+      "quiz_ids": ["q_htn_m1", "q_htn_m2"]
+    },
+    {
+      "scenario_id": "diab_fbs_rbs",
+      "version": 1,
+      "schema_version": 1,
+      "clinical_domain": "diabetes",
+      "action_type": "protocol_clarification",
+      "validated": true,
+      "source_doc": "Bangladesh NCD Guidelines 2023",
+      "source_page": 45,
+      "key_points": [
+        "Normal fasting glucose (FBS): below 5.6 mmol/L",
+        "Pre-diabetes FBS: 5.6–6.9 mmol/L",
+        "Diabetes FBS: 7.0 mmol/L or higher",
+        "Normal random glucose (RBS): below 7.8 mmol/L",
+        "Diabetes RBS: 11.1 mmol/L or higher with symptoms"
+      ],
+      "sop_excerpt_en": "Diabetes diagnosis thresholds for Community Health Workers in Bangladesh. FBS >= 7.0 mmol/L on two separate occasions or RBS >= 11.1 mmol/L with classic symptoms confirms diabetes.",
+      "referral_threshold": {
+        "condition": "FBS >= 7.0 or RBS >= 11.1 mmol/L",
+        "destination": "UHC"
+      },
+      "danger_signs": [
+        "Excessive thirst",
+        "Frequent urination",
+        "Fatigue",
+        "Slow wound healing"
+      ],
+      "bangla_card": {
+        "title": "Diabetes Test Thresholds",
+        "body": "Fasting Blood Sugar (FBS):\n• Normal: below 5.6 mmol/L\n• Pre-diabetes: 5.6–6.9 mmol/L\n• Diabetes: 7.0 mmol/L or higher\n\nRandom Blood Sugar (RBS):\n• Diabetes: 11.1 mmol/L or higher (with symptoms)",
+        "warning_signs_bangla": ["Excessive thirst", "Frequent urination", "Fatigue", "Slow wound healing"],
+        "next_step": "If FBS is 7.0 or RBS is above 11.1, refer to a doctor",
+        "referral_destination": "Upazila Health Complex"
+      },
+      "trigger_conditions": [
+        {"event": "assessment_completed", "condition": "diabetes_confirmed"}
+      ],
+      "quiz_ids": ["q_diab_1", "q_diab_2", "q_diab_3"]
+    },
+    {
+      "scenario_id": "diab_counsel",
+      "version": 1,
+      "schema_version": 1,
+      "clinical_domain": "diabetes",
+      "action_type": "counselling",
+      "validated": true,
+      "source_doc": "Bangladesh NCD Guidelines 2023",
+      "source_page": 52,
+      "key_points": [
+        "Advise patient to eat smaller meals at regular intervals — avoid large gaps between meals",
+        "Reduce white rice, white bread, sweets, and sugary drinks",
+        "Increase vegetables, lentils, and high-fibre foods",
+        "Daily walking 30–45 minutes lowers blood sugar",
+        "Foot care is important — check feet daily for wounds or sores",
+        "If hypoglycaemia (dizziness, sweating, shaking) — eat sugar immediately and refer"
+      ],
+      "sop_excerpt_en": "Lifestyle counselling for diabetes patients. Foot care education is a critical component — diabetic foot wounds are a common cause of hospitalisation in Bangladesh.",
+      "referral_threshold": {
+        "condition": "Hypoglycaemia symptoms or foot wound present",
+        "destination": "UHC"
+      },
+      "danger_signs": [
+        "Dizziness and sweating (hypoglycaemia)",
+        "Foot wound or ulcer"
+      ],
+      "bangla_card": {
+        "title": "Counselling: Diabetes Care",
+        "body": "1. Eat smaller meals every 4–5 hours\n2. Eat less white rice, sweets, and sugary drinks\n3. Walk 30–45 minutes every day\n4. Check your feet every day for wounds or sores\n5. If dizzy and sweating, eat sugar immediately",
+        "warning_signs_bangla": ["Dizziness and sweating (low sugar)", "Foot wound or sore"],
+        "next_step": "If foot wound found or patient dizzy and sweating, refer immediately",
+        "referral_destination": "Upazila Health Complex"
+      },
+      "trigger_conditions": [
+        {"event": "assessment_completed", "condition": "diabetes_confirmed"},
+        {"event": "morning_open", "condition": "gap_type_skill_application_diabetes"}
+      ],
+      "quiz_ids": ["q_diab_c1", "q_diab_c2"]
+    },
+    {
+      "scenario_id": "maternal_anc_danger",
+      "version": 1,
+      "schema_version": 1,
+      "clinical_domain": "maternal_health",
+      "action_type": "escalation",
+      "validated": true,
+      "source_doc": "Bangladesh MNCH Guidelines 2022",
+      "source_page": 18,
+      "key_points": [
+        "Danger signs in pregnancy requiring immediate referral",
+        "Severe headache with visual disturbance → pre-eclampsia",
+        "BP >= 140/90 in pregnancy → hypertensive disorder",
+        "Vaginal bleeding at any stage → emergency",
+        "Reduced or absent fetal movement → emergency",
+        "Swelling of face and hands → possible pre-eclampsia"
+      ],
+      "sop_excerpt_en": "Maternal health danger signs for Community Health Workers. Any pregnant woman with severe headache, visual disturbances, BP >= 140/90, vaginal bleeding, or reduced fetal movement must be referred immediately to the nearest facility.",
+      "referral_threshold": {
+        "condition": "Any of the listed danger signs present",
+        "destination": "district_hospital"
+      },
+      "danger_signs": [
+        "Severe headache",
+        "Blurred vision",
+        "Vaginal bleeding",
+        "Absent fetal movement",
+        "Face and hand swelling"
+      ],
+      "bangla_card": {
+        "title": "Danger Signs in Pregnancy",
+        "body": "Refer immediately if any of these signs are present:\n• Severe headache or blurred vision\n• Blood pressure 140/90 or higher\n• Vaginal bleeding\n• Reduced or absent fetal movement\n• Abnormal swelling of face and hands",
+        "warning_signs_bangla": ["Severe headache", "Blurred vision", "Vaginal bleeding", "Absent fetal movement"],
+        "next_step": "If any danger sign is present, refer immediately to the nearest health facility",
+        "referral_destination": "District Hospital"
+      },
+      "trigger_conditions": [
+        {"event": "risk_flag_observed", "condition": "maternal_danger_sign"},
+        {"event": "assessment_completed", "condition": "anc_visit"}
+      ],
+      "quiz_ids": ["q_mat_1", "q_mat_2", "q_mat_3"]
+    },
+    {
+      "scenario_id": "maternal_anc_prep",
+      "version": 1,
+      "schema_version": 1,
+      "clinical_domain": "maternal_health",
+      "action_type": "pre_visit_prep",
+      "validated": true,
+      "source_doc": "Bangladesh MNCH Guidelines 2022",
+      "source_page": 10,
+      "key_points": [
+        "At least 4 ANC visits are required: at 16, 24–26, 32, and 36 weeks",
+        "Ask about bleeding, swelling, headache, or reduced fetal movement since last visit",
+        "Check blood pressure and weight at every visit",
+        "Offer iron and folic acid tablets — confirm patient is taking them",
+        "Discuss birth preparedness plan: transport, support person, facility"
+      ],
+      "sop_excerpt_en": "ANC visit preparation checklist for CHW home visits. Birth preparedness discussion should happen at the 32-week visit at the latest.",
+      "referral_threshold": {
+        "condition": "BP >= 140/90 or any danger sign",
+        "destination": "UHC"
+      },
+      "danger_signs": [],
+      "bangla_card": {
+        "title": "Preparing for an ANC Visit",
+        "body": "Ask about:\n• Bleeding, headache, or swelling since last visit\n• Fetal movement felt?\n• Is she taking iron and folic acid tablets?\n\nCheck:\n• Blood pressure and weight\n\nDiscuss:\n• Transport plan for delivery\n• Who will accompany her?",
+        "warning_signs_bangla": [],
+        "next_step": "If BP >= 140/90 or any danger sign, refer immediately",
+        "referral_destination": "Upazila Health Complex"
+      },
+      "trigger_conditions": [
+        {"event": "morning_open", "condition": "anc_visit_today"}
+      ],
+      "quiz_ids": ["q_mat_p1", "q_mat_p2"]
+    }
+  ],
+  "quiz_questions": [
+    {
+      "id": "q_htn_1",
+      "scenario_id": "htn_threshold",
+      "question_bangla": "A patient's blood pressure is 160/100 mmHg. Where would you refer them?",
+      "options_bangla": [
+        "Community Clinic",
+        "Upazila Health Complex",
+        "Observe at home for 2 weeks",
+        "Refer only if symptoms are present"
+      ],
+      "correct_index": 1,
+      "explanation_bangla": "When BP is 140/90 or higher, refer to the Upazila Health Complex. 160/100 is Stage 2 — high risk.",
+      "difficulty": "FOUNDATIONAL",
+      "validated": true
+    },
+    {
+      "id": "q_htn_2",
+      "scenario_id": "htn_threshold",
+      "question_bangla": "Which reading is Hypertension Stage 2?",
+      "options_bangla": [
+        "120/80",
+        "125/85",
+        "135/85",
+        "140/90 or higher"
+      ],
+      "correct_index": 3,
+      "explanation_bangla": "140/90 mmHg or higher is Stage 2 hypertension and requires referral.",
+      "difficulty": "FOUNDATIONAL",
+      "validated": true
+    },
+    {
+      "id": "q_htn_3",
+      "scenario_id": "htn_threshold",
+      "question_bangla": "Which symptom in hypertension indicates an emergency?",
+      "options_bangla": [
+        "Mild headache",
+        "Slight swelling in the feet",
+        "Severe headache and blurred vision",
+        "Fatigue after physical activity"
+      ],
+      "correct_index": 2,
+      "explanation_bangla": "Severe headache and blurred vision are signs of a hypertensive emergency. Refer immediately.",
+      "difficulty": "FOUNDATIONAL",
+      "validated": true
+    },
+    {
+      "id": "q_htn_c1",
+      "scenario_id": "htn_counsel",
+      "question_bangla": "A patient with Stage 1 hypertension asks how much salt is safe per day. What is the correct answer?",
+      "options_bangla": [
+        "No limit — salt does not affect blood pressure",
+        "Less than 10 g per day",
+        "Less than 5 g per day",
+        "Only avoid adding salt at the table"
+      ],
+      "correct_index": 2,
+      "explanation_bangla": "The guideline recommends less than 5 g of salt per day to help reduce blood pressure.",
+      "difficulty": "FOUNDATIONAL",
+      "validated": true
+    },
+    {
+      "id": "q_htn_c2",
+      "scenario_id": "htn_counsel",
+      "question_bangla": "Which lifestyle change has the most direct impact on lowering blood pressure?",
+      "options_bangla": [
+        "Drinking more water",
+        "Reducing salt and doing daily exercise",
+        "Sleeping more hours",
+        "Avoiding cold weather"
+      ],
+      "correct_index": 1,
+      "explanation_bangla": "Reducing salt intake and daily moderate exercise (30 minutes walking) have the strongest evidence for lowering blood pressure.",
+      "difficulty": "INTERMEDIATE",
+      "validated": true
+    },
+    {
+      "id": "q_htn_m1",
+      "scenario_id": "htn_medication",
+      "question_bangla": "A patient says their BP feels normal so they stopped taking medication. What do you advise?",
+      "options_bangla": [
+        "It is fine to stop if BP feels normal",
+        "Restart only if headaches return",
+        "They must keep taking medicine every day — stopping can cause BP to spike",
+        "Reduce the dose by half"
+      ],
+      "correct_index": 2,
+      "explanation_bangla": "BP medicine must be taken every day, even when the patient feels well. Stopping suddenly can cause a dangerous BP spike.",
+      "difficulty": "FOUNDATIONAL",
+      "validated": true
+    },
+    {
+      "id": "q_htn_m2",
+      "scenario_id": "htn_medication",
+      "question_bangla": "A patient on BP medicine feels dizzy when they stand up. What advice do you give?",
+      "options_bangla": [
+        "Stop the medicine immediately",
+        "Stand up slowly and hold onto something",
+        "Lie down for the rest of the day",
+        "Drink more water and eat more salt"
+      ],
+      "correct_index": 1,
+      "explanation_bangla": "Postural dizziness is a common side effect of antihypertensives. Advise standing up slowly — do not stop the medicine without consulting the doctor.",
+      "difficulty": "INTERMEDIATE",
+      "validated": true
+    },
+    {
+      "id": "q_diab_1",
+      "scenario_id": "diab_fbs_rbs",
+      "question_bangla": "What fasting blood sugar level confirms a diabetes diagnosis?",
+      "options_bangla": [
+        "5.0 mmol/L or higher",
+        "6.0 mmol/L or higher",
+        "7.0 mmol/L or higher",
+        "8.0 mmol/L or higher"
+      ],
+      "correct_index": 2,
+      "explanation_bangla": "FBS of 7.0 mmol/L or higher on two occasions confirms diabetes.",
+      "difficulty": "FOUNDATIONAL",
+      "validated": true
+    },
+    {
+      "id": "q_diab_2",
+      "scenario_id": "diab_fbs_rbs",
+      "question_bangla": "What is the main warning sign of diabetes?",
+      "options_bangla": [
+        "Cold and cough",
+        "Excessive thirst and frequent urination",
+        "Only increased appetite",
+        "Back pain"
+      ],
+      "correct_index": 1,
+      "explanation_bangla": "Excessive thirst, frequent urination, and fatigue are classic symptoms of diabetes.",
+      "difficulty": "FOUNDATIONAL",
+      "validated": true
+    },
+    {
+      "id": "q_diab_3",
+      "scenario_id": "diab_fbs_rbs",
+      "question_bangla": "What FBS level indicates pre-diabetes?",
+      "options_bangla": [
+        "4.0–4.9 mmol/L",
+        "5.0–5.5 mmol/L",
+        "5.6–6.9 mmol/L",
+        "7.0 mmol/L or higher"
+      ],
+      "correct_index": 2,
+      "explanation_bangla": "FBS of 5.6–6.9 mmol/L indicates pre-diabetes. Advise lifestyle changes and regular monitoring.",
+      "difficulty": "INTERMEDIATE",
+      "validated": true
+    },
+    {
+      "id": "q_diab_c1",
+      "scenario_id": "diab_counsel",
+      "question_bangla": "A diabetes patient has a wound on their foot but says it does not hurt. What do you do?",
+      "options_bangla": [
+        "Advise them to monitor it at home — no pain means it is not serious",
+        "Clean it and recheck in a week",
+        "Refer immediately — diabetic foot wounds can become serious even without pain",
+        "Give paracetamol and advise rest"
+      ],
+      "correct_index": 2,
+      "explanation_bangla": "Diabetes can reduce pain sensation in the feet. Even a painless wound must be referred promptly as it can become infected and serious.",
+      "difficulty": "INTERMEDIATE",
+      "validated": true
+    },
+    {
+      "id": "q_diab_c2",
+      "scenario_id": "diab_counsel",
+      "question_bangla": "A diabetes patient is dizzy, sweating, and shaking. What is the first step?",
+      "options_bangla": [
+        "Advise them to lie down and rest",
+        "Give them sugar immediately (sweet drink or candy), then refer",
+        "Check their blood pressure first",
+        "Ask them to fast until the dizziness passes"
+      ],
+      "correct_index": 1,
+      "explanation_bangla": "Dizziness, sweating, and shaking are signs of hypoglycaemia (low blood sugar). Give sugar immediately, then refer.",
+      "difficulty": "FOUNDATIONAL",
+      "validated": true
+    },
+    {
+      "id": "q_mat_1",
+      "scenario_id": "maternal_anc_danger",
+      "question_bangla": "A pregnant patient has BP 150/95 and a headache. What do you do?",
+      "options_bangla": [
+        "Schedule a routine follow-up next week",
+        "Advise rest and recheck in 3 days",
+        "Refer immediately to the Upazila Health Complex",
+        "Give aspirin and monitor at home"
+      ],
+      "correct_index": 2,
+      "explanation_bangla": "BP >= 140/90 with headache in pregnancy is a sign of pre-eclampsia. Immediate referral is required.",
+      "difficulty": "FOUNDATIONAL",
+      "validated": true
+    },
+    {
+      "id": "q_mat_2",
+      "scenario_id": "maternal_anc_danger",
+      "question_bangla": "Which symptom during pregnancy is a danger sign requiring immediate referral?",
+      "options_bangla": [
+        "Morning nausea",
+        "Mild swelling in the feet",
+        "Blurred vision and severe headache",
+        "Fatigue after physical activity"
+      ],
+      "correct_index": 2,
+      "explanation_bangla": "Blurred vision and severe headache are danger signs of pre-eclampsia. Refer immediately.",
+      "difficulty": "FOUNDATIONAL",
+      "validated": true
+    },
+    {
+      "id": "q_mat_3",
+      "scenario_id": "maternal_anc_danger",
+      "question_bangla": "What should you do if vaginal bleeding occurs at any stage of pregnancy?",
+      "options_bangla": [
+        "Monitor at home if the amount is small",
+        "Tell the patient to go to the clinic the next day",
+        "Refer immediately to the nearest health facility",
+        "Refer only if bleeding occurs in the first trimester"
+      ],
+      "correct_index": 2,
+      "explanation_bangla": "Vaginal bleeding at any stage of pregnancy is an emergency. Refer immediately.",
+      "difficulty": "FOUNDATIONAL",
+      "validated": true
+    },
+    {
+      "id": "q_mat_p1",
+      "scenario_id": "maternal_anc_prep",
+      "question_bangla": "How many ANC visits are recommended during a normal pregnancy?",
+      "options_bangla": [
+        "1 visit",
+        "2 visits",
+        "At least 4 visits",
+        "Only if complications arise"
+      ],
+      "correct_index": 2,
+      "explanation_bangla": "At least 4 ANC visits are recommended at 16, 24–26, 32, and 36 weeks of pregnancy.",
+      "difficulty": "FOUNDATIONAL",
+      "validated": true
+    },
+    {
+      "id": "q_mat_p2",
+      "scenario_id": "maternal_anc_prep",
+      "question_bangla": "Which item must you discuss with the pregnant patient at the birth preparedness visit?",
+      "options_bangla": [
+        "Daily exercise routine",
+        "Transport plan and who will accompany her to the facility",
+        "Vaccination history only",
+        "Diet and nutrition only"
+      ],
+      "correct_index": 1,
+      "explanation_bangla": "Birth preparedness includes confirming transport arrangements and who will support the patient — this must be discussed by the 32-week visit.",
+      "difficulty": "INTERMEDIATE",
+      "validated": true
+    }
+  ],
+  "server_time_utc": "2026-04-19T00:00:00Z"
+}

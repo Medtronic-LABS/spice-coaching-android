@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- Required for OTel OTLP export and backend API calls -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- Required for model download (WorkManager constraints) -->
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+
+    <application>
+        <!-- SDK coaching flow — started by CoachingFlowActivity.launch() -->
+        <activity
+            android:name="com.medtroniclabs.microcoaching.ui.flow.CoachingFlowActivity"
+            android:theme="@style/Theme.AppCompat.Light.NoActionBar"
+            android:windowSoftInputMode="adjustResize"
+            android:exported="false" />
+
+        <!-- AndroidX App Startup initializer — zero boilerplate for SPICE -->
+        <provider
+            android:name="androidx.startup.InitializationProvider"
+            android:authorities="${applicationId}.androidx-startup"
+            android:exported="false"
+            tools:node="merge">
+            <meta-data
+                android:name="com.medtroniclabs.microcoaching.MicroCoachingInitializer"
+                android:value="androidx.startup" />
+        </provider>
+    </application>
+
+</manifest>

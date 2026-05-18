@@ -1,0 +1,431 @@
+{
+  "scenarios": [
+    {
+      "scenario_id": "htn_threshold",
+      "version": 1,
+      "clinical_domain": "hypertension",
+      "action_type": "protocol_clarification",
+      "validated": true,
+      "key_points": [
+        "Normal BP: below 120/80 mmHg",
+        "Elevated BP: 120-129 / below 80 mmHg",
+        "Hypertension Stage 1: 130-139 / 80-89 mmHg",
+        "Hypertension Stage 2: 140/90 mmHg or higher",
+        "Hypertensive Crisis: above 180/120 mmHg — refer immediately"
+      ],
+      "sop_excerpt_en": "Bangladesh NCD referral guidelines: CHW should refer any patient with BP >= 140/90 to Upazila Health Complex. Pregnancy with BP >= 140/90 with symptoms is a hypertensive emergency requiring immediate referral.",
+      "bangla_card": {
+        "title": "রক্তচাপের মাত্রা ও রেফারেল",
+        "body": "স্বাভাবিক রক্তচাপ: ১২০/৮০-এর নিচে\nউচ্চ রক্তচাপ (ধাপ ১): ১৩০-১৩৯ / ৮০-৮৯\nউচ্চ রক্তচাপ (ধাপ ২): ১৪০/৯০ বা তার বেশি\nহাইপারটেনসিভ ক্রাইসিস: ১৮০/১২০-এর বেশি — তাৎক্ষণিক রেফার করুন",
+        "warning_signs_bangla": ["তীব্র মাথাব্যথা", "ঝাপসা দৃষ্টি", "বুকে ব্যথা", "শ্বাসকষ্ট"],
+        "next_step": "রক্তচাপ ১৪০/৯০ বা তার বেশি হলে উপজেলা স্বাস্থ্য কমপ্লেক্সে রেফার করুন",
+        "referral_destination": "উপজেলা স্বাস্থ্য কমপ্লেক্স"
+      },
+      "trigger_conditions": [],
+      "quiz_ids": ["q_htn_1", "q_htn_2", "q_htn_3"]
+    },
+    {
+      "scenario_id": "diab_fbs_rbs",
+      "version": 1,
+      "clinical_domain": "diabetes",
+      "action_type": "protocol_clarification",
+      "validated": true,
+      "key_points": [
+        "Normal fasting glucose (FBS): below 5.6 mmol/L",
+        "Pre-diabetes FBS: 5.6–6.9 mmol/L",
+        "Diabetes FBS: 7.0 mmol/L or higher",
+        "Normal random glucose (RBS): below 7.8 mmol/L",
+        "Diabetes RBS: 11.1 mmol/L or higher with symptoms"
+      ],
+      "sop_excerpt_en": "Diabetes diagnosis thresholds for Community Health Workers in Bangladesh. FBS >= 7.0 mmol/L on two separate occasions or RBS >= 11.1 mmol/L with classic symptoms confirms diabetes.",
+      "bangla_card": {
+        "title": "ডায়াবেটিস পরীক্ষার মাত্রা",
+        "body": "খালি পেটে রক্তের শর্করা (FBS):\n• স্বাভাবিক: ৫.৬ mmol/L-এর নিচে\n• প্রি-ডায়াবেটিস: ৫.৬–৬.৯ mmol/L\n• ডায়াবেটিস: ৭.০ mmol/L বা তার বেশি\n\nযেকোনো সময় রক্তের শর্করা (RBS):\n• ডায়াবেটিস: ১১.১ mmol/L বা তার বেশি (উপসর্গসহ)",
+        "warning_signs_bangla": ["অতিরিক্ত তৃষ্ণা", "ঘন ঘন প্রস্রাব", "অবসাদ", "ঘা শুকাতে দেরি"],
+        "next_step": "FBS ৭.০ বা RBS ১১.১-এর বেশি হলে চিকিৎসকের কাছে রেফার করুন",
+        "referral_destination": "উপজেলা স্বাস্থ্য কমপ্লেক্স"
+      },
+      "trigger_conditions": [],
+      "quiz_ids": ["q_diab_1", "q_diab_2", "q_diab_3"]
+    },
+    {
+      "scenario_id": "maternal_anc_danger",
+      "version": 1,
+      "clinical_domain": "maternal_health",
+      "action_type": "escalation",
+      "validated": true,
+      "key_points": [
+        "Danger signs in pregnancy requiring immediate referral",
+        "Severe headache with visual disturbance → pre-eclampsia",
+        "BP >= 140/90 in pregnancy → hypertensive disorder",
+        "Vaginal bleeding at any stage → emergency",
+        "Reduced or absent fetal movement → emergency",
+        "Swelling of face and hands → possible pre-eclampsia"
+      ],
+      "sop_excerpt_en": "Maternal health danger signs for Community Health Workers. Any pregnant woman with severe headache, visual disturbances, BP >= 140/90, vaginal bleeding, or reduced fetal movement must be referred immediately to the nearest facility.",
+      "bangla_card": {
+        "title": "গর্ভাবস্থায় বিপদ চিহ্ন",
+        "body": "নিচের যেকোনো লক্ষণ দেখলে তাৎক্ষণিক রেফার করুন:\n• তীব্র মাথাব্যথা বা ঝাপসা দৃষ্টি\n• রক্তচাপ ১৪০/৯০ বা তার বেশি\n• যোনিপথে রক্তপাত\n• শিশুর নড়াচড়া কমে যাওয়া বা বন্ধ হওয়া\n• মুখ ও হাতে অস্বাভাবিক ফোলা",
+        "warning_signs_bangla": ["তীব্র মাথাব্যথা", "ঝাপসা দৃষ্টি", "যোনিপথে রক্তপাত", "শিশুর নড়াচড়া বন্ধ"],
+        "next_step": "যেকোনো বিপদ চিহ্ন দেখলে রোগীকে তাৎক্ষণিকভাবে নিকটস্থ স্বাস্থ্য সুবিধায় পাঠান",
+        "referral_destination": "উপজেলা স্বাস্থ্য কমপ্লেক্স / জেলা হাসপাতাল"
+      },
+      "trigger_conditions": [],
+      "quiz_ids": ["q_mat_1", "q_mat_2", "q_mat_3"]
+    },
+    {
+      "scenario_id": "emg_stroke_signs",
+      "version": 1,
+      "clinical_domain": "emergency",
+      "action_type": "referral_guidance",
+      "validated": true,
+      "key_points": [
+        "FAST: Face drooping, Arm weakness, Speech difficulty, Time to call",
+        "Sudden numbness or weakness of face, arm, or leg — especially on one side",
+        "Sudden confusion or trouble understanding speech",
+        "Sudden vision problems in one or both eyes",
+        "Sudden severe headache with no known cause"
+      ],
+      "sop_excerpt_en": "Stroke is a medical emergency. If a patient shows any FAST sign (Face drooping, Arm weakness, Speech difficulty), note the time of symptom onset and refer immediately to the nearest hospital with emergency care. Do not give food or water — aspiration risk.",
+      "bangla_card": {
+        "title": "স্ট্রোকের লক্ষণ ও জরুরি পদক্ষেপ",
+        "body": "FAST পদ্ধতিতে স্ট্রোক শনাক্ত করুন:\n• F – মুখ: একদিক বাঁকা বা ঝুলে পড়েছে?\n• A – হাত: একটি হাত দুর্বল বা উঠাতে পারছে না?\n• S – কথা: কথা জড়িয়ে যাচ্ছে বা বুঝতে পারছে না?\n• T – সময়: যেকোনো একটি লক্ষণ থাকলে তাৎক্ষণিক হাসপাতালে পাঠান\n\nলক্ষণ শুরুর সময় নোট করুন। খাবার বা পানি দেবেন না।",
+        "warning_signs_bangla": ["মুখ একদিক বাঁকা হয়ে যাওয়া", "হাত বা পা হঠাৎ দুর্বল হওয়া", "কথা জড়িয়ে যাওয়া", "হঠাৎ তীব্র মাথাব্যথা"],
+        "next_step": "যেকোনো FAST লক্ষণ দেখলে তাৎক্ষণিক জেলা হাসপাতালে রেফার করুন",
+        "referral_destination": "জেলা হাসপাতাল / টার্শিয়ারি সেন্টার"
+      },
+      "trigger_conditions": [],
+      "quiz_ids": ["q_emg_stroke_1", "q_emg_stroke_2"]
+    },
+    {
+      "scenario_id": "emg_eclampsia",
+      "version": 1,
+      "clinical_domain": "emergency",
+      "action_type": "referral_guidance",
+      "validated": true,
+      "key_points": [
+        "Eclampsia: seizures in a pregnant or recently delivered woman",
+        "Warning signs: BP >= 160/110, severe headache, visual changes, upper abdominal pain",
+        "Do NOT give anything by mouth during or after a seizure",
+        "Place patient on left side to prevent aspiration",
+        "Refer immediately — eclampsia is life-threatening for mother and baby"
+      ],
+      "sop_excerpt_en": "Eclampsia is a life-threatening emergency. Any pregnant woman with convulsions must be referred immediately. If the woman has BP >= 160/110 with headache, visual changes, or epigastric pain (severe pre-eclampsia), refer urgently even without convulsions.",
+      "bangla_card": {
+        "title": "এক্লাম্পসিয়া — গর্ভাবস্থার জরুরি অবস্থা",
+        "body": "গর্ভবতী বা সদ্য প্রসূতি নারীর খিঁচুনি = এক্লাম্পসিয়া।\n\nসাথে থাকতে পারে:\n• রক্তচাপ ১৬০/১১০ বা তার বেশি\n• তীব্র মাথাব্যথা ও ঝাপসা দৃষ্টি\n• পেটের উপরিভাগে ব্যথা\n\nকরণীয়:\n• বাম কাতে শোয়ান\n• মুখে কিছু দেবেন না\n• তাৎক্ষণিক হাসপাতালে পাঠান",
+        "warning_signs_bangla": ["খিঁচুনি", "রক্তচাপ ১৬০/১১০-এর বেশি", "তীব্র মাথাব্যথা", "ঝাপসা দৃষ্টি"],
+        "next_step": "তাৎক্ষণিকভাবে জেলা হাসপাতাল বা মা ও শিশু স্বাস্থ্য কেন্দ্রে রেফার করুন",
+        "referral_destination": "জেলা হাসপাতাল / মা ও শিশু স্বাস্থ্য কেন্দ্র"
+      },
+      "trigger_conditions": [],
+      "quiz_ids": ["q_emg_ecl_1", "q_emg_ecl_2"]
+    },
+    {
+      "scenario_id": "spice_patient_reg",
+      "version": 1,
+      "clinical_domain": "spice_digital",
+      "action_type": "skill_practice",
+      "validated": true,
+      "key_points": [
+        "Open SPICE app → tap 'New Patient' to begin registration",
+        "Enter patient name, age, gender, and village/upazila",
+        "Select NCD conditions: hypertension, diabetes, or both",
+        "Confirm phone number if available for follow-up reminders",
+        "Save the record — a patient ID is generated automatically"
+      ],
+      "sop_excerpt_en": "SPICE patient registration workflow for CHWs. All newly identified NCD patients must be registered in SPICE before their first clinical assessment. The system auto-generates a patient ID linked to the upazila.",
+      "bangla_card": {
+        "title": "SPICE-এ নতুন রোগী নিবন্ধন",
+        "body": "নতুন রোগী যোগ করার ধাপ:\n১. SPICE অ্যাপ খুলুন → 'নতুন রোগী' বোতামে ট্যাপ করুন\n২. নাম, বয়স, লিঙ্গ ও গ্রাম/উপজেলা লিখুন\n৩. রোগের ধরন বেছে নিন: উচ্চ রক্তচাপ, ডায়াবেটিস বা উভয়\n৪. ফোন নম্বর দিন (যদি থাকে)\n৫. 'সংরক্ষণ করুন' চাপুন — স্বয়ংক্রিয়ভাবে রোগী আইডি তৈরি হবে",
+        "warning_signs_bangla": [],
+        "next_step": "রোগী নিবন্ধনের পরে প্রথম মূল্যায়ন সম্পন্ন করুন",
+        "referral_destination": null
+      },
+      "trigger_conditions": [],
+      "quiz_ids": ["q_spice_reg_1", "q_spice_reg_2"]
+    },
+    {
+      "scenario_id": "spice_bp_entry",
+      "version": 1,
+      "clinical_domain": "spice_digital",
+      "action_type": "skill_practice",
+      "validated": true,
+      "key_points": [
+        "Find the patient in SPICE using name or patient ID",
+        "Tap 'Record Visit' → select 'BP Measurement'",
+        "Enter systolic and diastolic values from the BP device",
+        "Add any symptoms reported by the patient in the notes field",
+        "Submit — SPICE automatically flags high readings for follow-up"
+      ],
+      "sop_excerpt_en": "SPICE BP data entry for CHW follow-up visits. BP readings must be entered within 24 hours of the visit. Readings of 140/90 or above are automatically flagged and appear in the supervisor dashboard.",
+      "bangla_card": {
+        "title": "SPICE-এ রক্তচাপ রেকর্ড করুন",
+        "body": "রক্তচাপ এন্ট্রির ধাপ:\n১. SPICE-এ রোগীর নাম বা আইডি দিয়ে খুঁজুন\n২. 'ভিজিট রেকর্ড করুন' → 'রক্তচাপ পরিমাপ' বেছে নিন\n৩. সিস্টোলিক ও ডায়াস্টোলিক সংখ্যা লিখুন\n৪. রোগীর কোনো উপসর্গ থাকলে নোটে লিখুন\n৫. 'জমা দিন' চাপুন\n\nউচ্চ রক্তচাপ হলে SPICE স্বয়ংক্রিয়ভাবে ফ্ল্যাগ করবে।",
+        "warning_signs_bangla": [],
+        "next_step": "ভিজিটের ২৪ ঘণ্টার মধ্যে SPICE-এ রক্তচাপ রেকর্ড করুন",
+        "referral_destination": null
+      },
+      "trigger_conditions": [],
+      "quiz_ids": ["q_spice_bp_1", "q_spice_bp_2"]
+    }
+  ],
+  "quiz_questions": [
+    {
+      "id": "q_htn_1",
+      "scenario_id": "htn_threshold",
+      "question_bangla": "একজন রোগীর রক্তচাপ ১৬০/১০০ mmHg। আপনি কোথায় রেফার করবেন?",
+      "options_bangla": [
+        "কমিউনিটি ক্লিনিক",
+        "উপজেলা স্বাস্থ্য কমপ্লেক্স",
+        "বাড়িতে ২ সপ্তাহ পর্যবেক্ষণ করুন",
+        "শুধুমাত্র উপসর্গ থাকলে রেফার করুন"
+      ],
+      "correct_index": 1,
+      "explanation_bangla": "রক্তচাপ ১৪০/৯০ বা তার বেশি হলে উপজেলা স্বাস্থ্য কমপ্লেক্সে রেফার করতে হবে। ১৬০/১০০ উচ্চ ঝুঁকিপূর্ণ।",
+      "difficulty": "FOUNDATIONAL",
+      "validated": true
+    },
+    {
+      "id": "q_htn_2",
+      "scenario_id": "htn_threshold",
+      "question_bangla": "কোন রক্তচাপের মাত্রাকে উচ্চ রক্তচাপ (Stage 2) হিসেবে বিবেচনা করা হয়?",
+      "options_bangla": [
+        "১২০/৮০",
+        "১২৫/৮৫",
+        "১৩৫/৮৫",
+        "১৪০/৯০ বা তার বেশি"
+      ],
+      "correct_index": 3,
+      "explanation_bangla": "১৪০/৯০ mmHg বা তার বেশি রক্তচাপ উচ্চ রক্তচাপ Stage 2 হিসেবে বিবেচিত এবং রেফারেলের প্রয়োজন।",
+      "difficulty": "FOUNDATIONAL",
+      "validated": true
+    },
+    {
+      "id": "q_htn_3",
+      "scenario_id": "htn_threshold",
+      "question_bangla": "উচ্চ রক্তচাপে কোন লক্ষণটি তাৎক্ষণিক রেফারেলের ইঙ্গিত দেয়?",
+      "options_bangla": [
+        "হালকা মাথাব্যথা",
+        "পায়ে সামান্য ফোলা",
+        "তীব্র মাথাব্যথা ও ঝাপসা দৃষ্টি",
+        "শারীরিক কার্যকলাপের পরে ক্লান্তি"
+      ],
+      "correct_index": 2,
+      "explanation_bangla": "তীব্র মাথাব্যথা ও ঝাপসা দৃষ্টি হাইপারটেনসিভ ইমার্জেন্সির লক্ষণ। তাৎক্ষণিক রেফার করুন।",
+      "difficulty": "FOUNDATIONAL",
+      "validated": true
+    },
+    {
+      "id": "q_diab_1",
+      "scenario_id": "diab_fbs_rbs",
+      "question_bangla": "খালি পেটে রক্তের শর্করা কত হলে ডায়াবেটিস নির্ণয় করা হয়?",
+      "options_bangla": [
+        "৫.০ mmol/L বা তার বেশি",
+        "৬.০ mmol/L বা তার বেশি",
+        "৭.০ mmol/L বা তার বেশি",
+        "৮.০ mmol/L বা তার বেশি"
+      ],
+      "correct_index": 2,
+      "explanation_bangla": "খালি পেটে রক্তের শর্করা ৭.০ mmol/L বা তার বেশি হলে ডায়াবেটিস নির্ণয় করা হয়।",
+      "difficulty": "FOUNDATIONAL",
+      "validated": true
+    },
+    {
+      "id": "q_diab_2",
+      "scenario_id": "diab_fbs_rbs",
+      "question_bangla": "ডায়াবেটিসের প্রধান সতর্কতামূলক লক্ষণ কোনটি?",
+      "options_bangla": [
+        "ঠান্ডা লাগা ও কাশি",
+        "অতিরিক্ত তৃষ্ণা ও ঘন ঘন প্রস্রাব",
+        "শুধু ক্ষুধা বেড়ে যাওয়া",
+        "পিঠে ব্যথা"
+      ],
+      "correct_index": 1,
+      "explanation_bangla": "অতিরিক্ত তৃষ্ণা, ঘন ঘন প্রস্রাব এবং অবসাদ ডায়াবেটিসের ক্লাসিক লক্ষণ।",
+      "difficulty": "FOUNDATIONAL",
+      "validated": true
+    },
+    {
+      "id": "q_diab_3",
+      "scenario_id": "diab_fbs_rbs",
+      "question_bangla": "প্রি-ডায়াবেটিস শনাক্তকরণের জন্য FBS-এর মাত্রা কত?",
+      "options_bangla": [
+        "৪.০–৪.৯ mmol/L",
+        "৫.০–৫.৫ mmol/L",
+        "৫.৬–৬.৯ mmol/L",
+        "৭.০ mmol/L বা তার বেশি"
+      ],
+      "correct_index": 2,
+      "explanation_bangla": "FBS ৫.৬–৬.৯ mmol/L হলে প্রি-ডায়াবেটিস। জীবনধারা পরিবর্তনের পরামর্শ দিন এবং নিয়মিত পর্যবেক্ষণ করুন।",
+      "difficulty": "INTERMEDIATE",
+      "validated": true
+    },
+    {
+      "id": "q_mat_1",
+      "scenario_id": "maternal_anc_danger",
+      "question_bangla": "গর্ভবতী রোগীর রক্তচাপ ১৫০/৯৫ এবং মাথাব্যথা আছে। সঠিক পদক্ষেপ কী?",
+      "options_bangla": [
+        "পরের সপ্তাহে রুটিন ফলো-আপ নির্ধারণ করুন",
+        "বিশ্রাম নিতে বলুন ও ৩ দিন পরে পুনরায় পরীক্ষা করুন",
+        "তাৎক্ষণিকভাবে উপজেলা স্বাস্থ্য কমপ্লেক্সে রেফার করুন",
+        "অ্যাসপিরিন দিন ও বাড়িতে পর্যবেক্ষণ করুন"
+      ],
+      "correct_index": 2,
+      "explanation_bangla": "গর্ভাবস্থায় রক্তচাপ ১৪০/৯০ বা তার বেশি এবং মাথাব্যথা প্রি-এক্লাম্পসিয়ার লক্ষণ। তাৎক্ষণিক রেফার প্রয়োজন।",
+      "difficulty": "FOUNDATIONAL",
+      "validated": true
+    },
+    {
+      "id": "q_mat_2",
+      "scenario_id": "maternal_anc_danger",
+      "question_bangla": "গর্ভাবস্থায় কোন লক্ষণটি তাৎক্ষণিক রেফারেলের জন্য বিপদ চিহ্ন?",
+      "options_bangla": [
+        "সকালের বমিভাব",
+        "পায়ে হালকা ফোলা",
+        "ঝাপসা দৃষ্টি ও তীব্র মাথাব্যথা",
+        "শারীরিক কার্যকলাপের পরে ক্লান্তি"
+      ],
+      "correct_index": 2,
+      "explanation_bangla": "ঝাপসা দৃষ্টি ও তীব্র মাথাব্যথা প্রি-এক্লাম্পসিয়ার বিপদ চিহ্ন। তাৎক্ষণিক রেফার করুন।",
+      "difficulty": "FOUNDATIONAL",
+      "validated": true
+    },
+    {
+      "id": "q_mat_3",
+      "scenario_id": "maternal_anc_danger",
+      "question_bangla": "গর্ভাবস্থার যেকোনো পর্যায়ে যোনিপথে রক্তপাত হলে কী করবেন?",
+      "options_bangla": [
+        "পরিমাণ কম হলে বাড়িতে পর্যবেক্ষণ করুন",
+        "পরের দিন ক্লিনিকে যেতে বলুন",
+        "তাৎক্ষণিকভাবে নিকটস্থ স্বাস্থ্য সুবিধায় রেফার করুন",
+        "শুধুমাত্র প্রথম তিন মাসে রক্তপাত হলে রেফার করুন"
+      ],
+      "correct_index": 2,
+      "explanation_bangla": "গর্ভাবস্থার যেকোনো পর্যায়ে যোনিপথে রক্তপাত একটি জরুরি অবস্থা। তাৎক্ষণিক রেফার করুন।",
+      "difficulty": "FOUNDATIONAL",
+      "validated": true
+    },
+    {
+      "id": "q_emg_stroke_1",
+      "scenario_id": "emg_stroke_signs",
+      "question_bangla": "FAST পদ্ধতিতে স্ট্রোকের লক্ষণে 'A' কী নির্দেশ করে?",
+      "options_bangla": [
+        "উদ্বেগ (Anxiety)",
+        "হাতের দুর্বলতা (Arm weakness)",
+        "পেটে ব্যথা (Abdominal pain)",
+        "দুর্ঘটনা (Accident)"
+      ],
+      "correct_index": 1,
+      "explanation_bangla": "FAST-এ A মানে Arm weakness — হাত দুর্বল বা উঠাতে না পারা স্ট্রোকের লক্ষণ।",
+      "difficulty": "FOUNDATIONAL",
+      "validated": true
+    },
+    {
+      "id": "q_emg_stroke_2",
+      "scenario_id": "emg_stroke_signs",
+      "question_bangla": "স্ট্রোকের উপসর্গ দেখলে প্রথমে কী করবেন?",
+      "options_bangla": [
+        "বাড়িতে বিশ্রাম দিন",
+        "পানি ও খাবার দিন",
+        "উপসর্গের সময় নোট করে তাৎক্ষণিক হাসপাতালে পাঠান",
+        "পরের দিন ডাক্তারের কাছে যেতে বলুন"
+      ],
+      "correct_index": 2,
+      "explanation_bangla": "স্ট্রোক সময়-সংকটাপন্ন জরুরি অবস্থা। উপসর্গের সময় নোট করুন ও তাৎক্ষণিক হাসপাতালে রেফার করুন। মুখে কিছু দেবেন না।",
+      "difficulty": "FOUNDATIONAL",
+      "validated": true
+    },
+    {
+      "id": "q_emg_ecl_1",
+      "scenario_id": "emg_eclampsia",
+      "question_bangla": "এক্লাম্পসিয়া কী?",
+      "options_bangla": [
+        "গর্ভাবস্থায় ডায়াবেটিস",
+        "গর্ভবতী বা সদ্য প্রসূতি নারীর খিঁচুনি",
+        "প্রসবের পরে রক্তক্ষরণ",
+        "সকালের বমিভাব"
+      ],
+      "correct_index": 1,
+      "explanation_bangla": "এক্লাম্পসিয়া হল গর্ভাবস্থায় বা সদ্য প্রসবের পরে খিঁচুনি। এটি মা ও শিশু উভয়ের জন্য জীবনঘাতী জরুরি অবস্থা।",
+      "difficulty": "FOUNDATIONAL",
+      "validated": true
+    },
+    {
+      "id": "q_emg_ecl_2",
+      "scenario_id": "emg_eclampsia",
+      "question_bangla": "এক্লাম্পসিয়ার খিঁচুনির সময় কী করবেন?",
+      "options_bangla": [
+        "রোগীকে বসিয়ে রাখুন ও পানি দিন",
+        "বাম কাতে শোয়ান, মুখে কিছু দেবেন না, তাৎক্ষণিক রেফার করুন",
+        "ঘুমের ওষুধ দিন",
+        "শুধু মাথায় ঠান্ডা পানি দিন"
+      ],
+      "correct_index": 1,
+      "explanation_bangla": "বাম কাতে শোয়ালে বমি শ্বাসনালিতে যাওয়ার ঝুঁকি কমে। মুখে কিছু দেওয়া বিপজ্জনক। তাৎক্ষণিক হাসপাতালে রেফার করুন।",
+      "difficulty": "FOUNDATIONAL",
+      "validated": true
+    },
+    {
+      "id": "q_spice_reg_1",
+      "scenario_id": "spice_patient_reg",
+      "question_bangla": "SPICE অ্যাপে নতুন রোগী নিবন্ধনের প্রথম ধাপ কী?",
+      "options_bangla": [
+        "রক্তচাপ মাপুন",
+        "অ্যাপ খুলুন ও 'নতুন রোগী' বোতামে ট্যাপ করুন",
+        "সুপারভাইজারকে ফোন করুন",
+        "কাগজে তথ্য লিখুন"
+      ],
+      "correct_index": 1,
+      "explanation_bangla": "SPICE অ্যাপ খুলে 'নতুন রোগী' বোতামে ট্যাপ করলেই নিবন্ধন ফর্ম শুরু হয়।",
+      "difficulty": "FOUNDATIONAL",
+      "validated": true
+    },
+    {
+      "id": "q_spice_reg_2",
+      "scenario_id": "spice_patient_reg",
+      "question_bangla": "SPICE-এ রোগী নিবন্ধনের সময় অবশ্যই কোন তথ্য দিতে হয়?",
+      "options_bangla": [
+        "শুধু নাম",
+        "নাম, বয়স, লিঙ্গ ও রোগের ধরন",
+        "শুধু রোগের ধরন",
+        "শুধু ফোন নম্বর"
+      ],
+      "correct_index": 1,
+      "explanation_bangla": "নাম, বয়স, লিঙ্গ এবং রোগের ধরন (উচ্চ রক্তচাপ/ডায়াবেটিস) সঠিক নিবন্ধনের জন্য আবশ্যক।",
+      "difficulty": "FOUNDATIONAL",
+      "validated": true
+    },
+    {
+      "id": "q_spice_bp_1",
+      "scenario_id": "spice_bp_entry",
+      "question_bangla": "SPICE-এ রক্তচাপ রেকর্ড করতে কোন বিকল্পটি বেছে নিতে হয়?",
+      "options_bangla": [
+        "নতুন রোগী",
+        "ভিজিট রেকর্ড করুন → রক্তচাপ পরিমাপ",
+        "সিঙ্ক করুন",
+        "রিপোর্ট দেখুন"
+      ],
+      "correct_index": 1,
+      "explanation_bangla": "'ভিজিট রেকর্ড করুন' → 'রক্তচাপ পরিমাপ' নির্বাচন করলে BP এন্ট্রি ফর্ম আসে।",
+      "difficulty": "FOUNDATIONAL",
+      "validated": true
+    },
+    {
+      "id": "q_spice_bp_2",
+      "scenario_id": "spice_bp_entry",
+      "question_bangla": "SPICE-এ রক্তচাপ কখনকার মধ্যে এন্ট্রি করতে হয়?",
+      "options_bangla": [
+        "এক সপ্তাহের মধ্যে",
+        "পরের মাসে",
+        "ভিজিটের ২৪ ঘণ্টার মধ্যে",
+        "যেকোনো সময়"
+      ],
+      "correct_index": 2,
+      "explanation_bangla": "ভিজিটের ২৪ ঘণ্টার মধ্যে BP এন্ট্রি করতে হয় যাতে সুপারভাইজার ড্যাশবোর্ডে সময়মতো দেখা যায়।",
+      "difficulty": "FOUNDATIONAL",
+      "validated": true
+    }
+  ],
+  "server_time_utc": "2026-04-15T00:00:00Z"
+}
