@@ -43,10 +43,8 @@ import com.medtroniclabs.microcoaching.ui.richtext.RichCardBody
 import com.medtroniclabs.microcoaching.ui.theme.SpiceBlue
 
 // ── Cards phase ───────────────────────────────────────────────────────────────
-// The lesson-card rendering + terminal actions for the refresher bottom sheet;
-// RefresherContent keeps the flow state machine. Same package, so it calls these
-// without an import; both are `internal` because the caller lives in a sibling file.
-// The shared RefresherActions data class stays with the flow that constructs it.
+// Lesson-card rendering + terminal actions for the refresher sheet; RefresherContent
+// owns the flow state machine and constructs RefresherActions.
 
 @Composable
 internal fun RefresherCardSlide(
@@ -150,9 +148,8 @@ internal fun RefresherCardSlide(
         }
         Spacer(Modifier.height(12.dp))
         if (isLast && refresherActions != null) {
-            // Terminal card (QUESTION_FIRST modules-screen flow): the last lesson
-            // card hosts the completion actions. CARDS_FIRST surfaces the same
-            // actions on the last quiz question's footer instead.
+            // Cards are the last phase (a Learning refresher), so the final card hosts
+            // the completion actions. When a quiz follows, they ride its last question.
             RefresherTerminalActions(
                 actions = refresherActions,
                 contentPadding = buttonContentPadding,
@@ -182,8 +179,8 @@ internal fun RefresherCardSlide(
 }
 
 /**
- * Completion buttons shared by the QUESTION_FIRST last lesson card and the
- * CARDS_FIRST last-question footer. When another refresher is queued →
+ * Completion buttons, hosted by whichever phase runs last — the final lesson card for a
+ * Learning refresher, the final question otherwise. When another refresher is queued →
  * "Next refresher" + "I'll do it later"; otherwise a single "Done". A retry follows
  * whenever [RefresherActions.onRetryQuiz] is set.
  *

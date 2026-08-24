@@ -9,6 +9,7 @@ import com.medtroniclabs.microcoaching.MicroCoachingSDK
 import com.medtroniclabs.microcoaching.data.db.entity.MorningCardCacheEntity
 import com.medtroniclabs.microcoaching.ui.common.translatedText
 import com.medtroniclabs.microcoaching.data.db.entity.ModuleEntity
+import com.medtroniclabs.microcoaching.domain.refresher.RefresherKind
 import com.medtroniclabs.microcoaching.progress.refresherDrillQuestionIds
 import com.medtroniclabs.microcoaching.progress.toReinforceQuestionIds
 import com.medtroniclabs.microcoaching.ui.learn.LearnModule
@@ -49,11 +50,19 @@ class QuickLearnViewModel(
     val answerState: StateFlow<AnswerOutcome?> = _answerState.asStateFlow()
 
     /**
-     * The question set the refresher sheet renders for the primed module — its drill
-     * set (see [reinforceSlice]), or the whole quiz when nothing is outstanding.
-     * Populated by [primeRefresherQuiz]; empty until called.
+     * The question set the refresher sheet renders for the primed module — its drill set
+     * (see [reinforceSlice]). Empty until [primeRefresherQuiz] runs, and legitimately empty
+     * afterwards for a [RefresherKind.LEARNING] refresher, which has no quiz phase.
      */
     val filteredQuestionsForRefresher = MutableStateFlow<List<QuizQuestion>>(emptyList())
+
+    /**
+     * What the primed refresher asks of the CHW, driving which phases the sheet runs. Read
+     * from the already-classified [refresherModules] rather than recomputed, so the sheet
+     * cannot contradict the tile the CHW tapped. Null until [primeRefresherQuiz] runs, or
+     * when the family isn't on the refresher list (the sheet then infers from content).
+     */
+    val primedKind = MutableStateFlow<RefresherKind?>(null)
 
     /**
      * The module entity most recently primed by [primeRefresherQuiz]. Held so the
@@ -206,15 +215,11 @@ class QuickLearnViewModel(
      * unanswered-correctly (wrong + never-answered/server-incomplete), narrowed by the
      * morning card's targeted question and ordered wrong-first.
      *
-     * This is the single source of truth for what a refresher presents. The tile count
-     * ([com.medtroniclabs.microcoaching.domain.refresher.LearnModuleMapper]
-     * `reinforceQuestionCount`) applies the same [refresherDrillQuestionIds] rule to
-     * the same set, so tile and sheet agree; the membership filter
-     * (`keepIfHasReinforceQuestions`) only asks whether the set is empty, which the
-     * narrowing preserves.
+     * The tile count applies the same [refresherDrillQuestionIds] rule to the same set,
+     * so the tile and the sheet always agree on how many questions there are.
      *
-     * Empty when the module is fully mastered — it then drops from the morning list
-     * upstream.
+     * Empty when the module is fully mastered; the classifier then drops it from the
+     * refresher list entirely, unless it is an action-gap re-drill.
      */
     private suspend fun reinforceSlice(entity: ModuleEntity): List<QuizQuestion> {
         val allQ = parseInlineQuiz(entity.quizJson, sdkLang())
@@ -297,10 +302,9 @@ class QuickLearnViewModel(
     }
 
     /**
-     * Primes [learnViewModel] with the refresher question set for the top morning
-     * module (see [reinforceSlice] for how that set is chosen). Answering it clears the
-     * module so it stops re-surfacing. Also updates [wrongQuestionCount] (= the set
-     * size) for the home-screen card label, keeping it in sync with the tile + sheet.
+     * Primes [primedKind] and, when that kind has a quiz phase, [learnViewModel] with the
+     * drill set (see [reinforceSlice]). Also updates [wrongQuestionCount] for the
+     * home-screen card label, keeping it in sync with the tile and the sheet.
      */
     suspend fun primeRefresherQuiz(targetModuleFamilyId: String? = null) {
         // Resolve against the DB-loaded refresher queue (the exact list/banner the
@@ -314,22 +318,38 @@ class QuickLearnViewModel(
         } ?: return
         lastPrimedEntity = entity
 
-        // The drill set, already narrowed to the card's targeted question and ordered
-        // weak-first by reinforceSlice. If the module is fully mastered (nothing
-        // outstanding) — e.g. a skipped card the CHW already aced, still reachable from
-        // the list — fall back to the WHOLE quiz (order randomised) so the tap opens a
-        // re-takeable sheet matching the tile's fallback count, instead of a blank
-        // screen. Either way, shuffle each question's options for this attempt.
-        val ordered = reinforceSlice(entity)
-            .ifEmpty { parseInlineQuiz(entity.quizJson, sdkLang()).shuffledForAttempt() }
-        val selected = ordered.map { it.withShuffledOptions() }
-        if (selected.isEmpty()) return // genuinely no quiz
+        val listed = refresherModules.value.firstOrNull { it.moduleFamilyId == entity.moduleFamilyId }
+        val kind = listed?.refresherKind
+        primedKind.value = kind
         val card = morningCardFor(entity)
+
+        // A cards-only refresher has no quiz phase; leave the question set empty rather
+        // than manufacturing one, so the sheet shows exactly what its tile advertised.
+        if (kind == RefresherKind.LEARNING) {
+            _wrongQuestionCount.value = 0
+            filteredQuestionsForRefresher.value = emptyList()
+            android.util.Log.i(TAG, "primeRefresherQuiz: family=${entity.moduleFamilyId} kind=LEARNING (cards only)")
+            return
+        }
+
+        // An action gap is cleared by a passing re-drill, not by mastery, so it re-runs the
+        // whole quiz once its to-reinforce set is empty. Every other kind has a non-empty
+        // drill set by construction — no fallback, or the sheet would contradict the tile.
+        val ordered = reinforceSlice(entity)
+            .ifEmpty {
+                if (listed?.isActionGap == true) {
+                    parseInlineQuiz(entity.quizJson, sdkLang()).shuffledForAttempt()
+                } else {
+                    emptyList()
+                }
+            }
+        val selected = ordered.map { it.withShuffledOptions() }
+        if (selected.isEmpty()) return
         // One line carrying everything the tile count depends on, so a count/drill
         // mismatch can be diagnosed from logcat instead of re-deriving the pipeline.
         android.util.Log.i(TAG,
             "primeRefresherQuiz: family=${entity.moduleFamilyId} module=${entity.moduleId} " +
-                "v=${entity.version} card=${card?.moduleId ?: "none"} " +
+                "v=${entity.version} kind=${kind ?: "unlisted"} card=${card?.moduleId ?: "none"} " +
                 "targetQuiz=${card?.quizId ?: "none"} selected=${selected.size}")
 
         _wrongQuestionCount.value = selected.size

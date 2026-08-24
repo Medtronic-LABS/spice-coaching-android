@@ -37,14 +37,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -149,10 +144,8 @@ fun MetricCard(metric: PoMetric, onClick: () -> Unit, modifier: Modifier = Modif
                     fontWeight = FontWeight.Bold,
                 )
                 Spacer(Modifier.height(12.dp))
-                val full = stringResource(metricDescription(metric.key))
-                val highlight = metricHighlight(metric.key)?.let { stringResource(it) }
                 Text(
-                    text = highlighted(full, highlight, SpiceBlue),
+                    text = stringResource(metricDescription(metric.key)),
                     style = MaterialTheme.typography.bodyLarge,
                     color = MutedText,
                 )
@@ -200,30 +193,3 @@ private fun metricSheetTitle(key: MetricKey): Int = when (key) {
     else -> metricLabel(key)
 }
 
-/** Phrase to highlight inside the description, or null for none. */
-@StringRes
-private fun metricHighlight(key: MetricKey): Int? = when (key) {
-    MetricKey.FINISHED_MODULES -> R.string.po_metric_hl_finished
-    MetricKey.CHATBOT_ENGAGED -> R.string.po_metric_hl_chatbot
-    else -> null
-}
-
-/**
- * [full] with [phrase] styled in [color] (semibold). Falls back to plain text when the
- * phrase is absent — so a locale whose translation doesn't contain the exact substring
- * still renders the whole sentence, just unhighlighted.
- */
-private fun highlighted(full: String, phrase: String?, color: Color): AnnotatedString =
-    buildAnnotatedString {
-        val p = phrase?.takeIf { it.isNotBlank() }
-        val at = p?.let { full.indexOf(it) } ?: -1
-        if (p == null || at < 0) {
-            append(full)
-        } else {
-            append(full.substring(0, at))
-            withStyle(SpanStyle(color = color, fontWeight = FontWeight.SemiBold)) {
-                append(full.substring(at, at + p.length))
-            }
-            append(full.substring(at + p.length))
-        }
-    }

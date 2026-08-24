@@ -32,10 +32,12 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.medtroniclabs.microcoaching.R
 import com.medtroniclabs.microcoaching.ui.common.CenterProgress
 import com.medtroniclabs.microcoaching.ui.common.SdkScreenHeader
+import com.medtroniclabs.microcoaching.ui.podashboard.DateRange
 import com.medtroniclabs.microcoaching.ui.podashboard.ModuleQuestionItem
 import com.medtroniclabs.microcoaching.ui.podashboard.SearchedModuleDetail
 import com.medtroniclabs.microcoaching.ui.podashboard.SearchedModuleDetailUiState
@@ -43,6 +45,7 @@ import com.medtroniclabs.microcoaching.ui.podashboard.SearchedModuleDetailViewMo
 import com.medtroniclabs.microcoaching.ui.podashboard.components.MutedText
 import com.medtroniclabs.microcoaching.ui.podashboard.components.StatusGreen
 import com.medtroniclabs.microcoaching.ui.podashboard.components.poCard
+import com.medtroniclabs.microcoaching.ui.podashboard.components.FREE_TEXT_MAX_LINES
 import com.medtroniclabs.microcoaching.ui.theme.SpiceBlue
 import com.medtroniclabs.microcoaching.ui.theme.SurfaceMuted
 
@@ -54,9 +57,14 @@ private val DividerColor = Color(0xFFEFEFF3)
  * View-only — Admin Assign is a web workflow, not exposed on PO mobile.
  */
 @Composable
-fun SearchedModuleDetailScreen(moduleId: String, onBack: () -> Unit, onHome: () -> Unit) {
+fun SearchedModuleDetailScreen(
+    moduleId: String,
+    range: DateRange,
+    onBack: () -> Unit,
+    onHome: () -> Unit,
+) {
     val vm: SearchedModuleDetailViewModel =
-        viewModel(factory = SearchedModuleDetailViewModel.factory(moduleId))
+        viewModel(factory = SearchedModuleDetailViewModel.factory(moduleId, range))
     val state by vm.uiState.collectAsState()
     val networkAvailable by vm.networkAvailable.collectAsState()
 
@@ -133,7 +141,13 @@ private fun QueryAccordionRow(item: ModuleQuestionItem, expanded: Boolean, onTog
             modifier = Modifier.fillMaxWidth().clickable(onClick = onToggle).padding(16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(item.text, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+            Text(
+                text = item.text,
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = FREE_TEXT_MAX_LINES,
+                overflow = TextOverflow.Ellipsis,
+            )
             Spacer(Modifier.width(8.dp))
             Text("${item.occurrenceCount}", color = SpiceBlue, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
             Icon(

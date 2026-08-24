@@ -9,9 +9,13 @@ import com.medtroniclabs.microcoaching.util.LenientJson
 import retrofit2.Response
 import java.time.Instant
 import java.time.LocalDate
+import java.time.LocalDateTime
 import java.time.OffsetDateTime
+import java.time.ZoneId
 import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
+import java.util.Locale
 
 /**
  * Real [PODashboardDataSource] backed by the `dashboard/…` endpoints on
@@ -140,19 +144,42 @@ class ApiPODashboardDataSource(
     ): DocumentUsageDetail {
         val from = range.fromMillis.toApiDate()
         val to = range.toMillis.toApiDate()
-        // `document_id` narrows every section, so one call yields both the
-        // document's totals and its view list.
-        val response = api.getDocumentUsage(
+        // `document_id` narrows every section, so the first call yields both the
+        // document's totals and the first page of its opens.
+        val first = api.getDocumentUsage(
             from, to,
             documentId = documentId,
             documentsLimit = 1,
             eventsLimit = PAGE,
         ).bodyOrThrow()
-        return response.toDocumentUsageDetail(documentId)
+
+        // The readers list is pivoted from the opens, so stopping at one page
+        // would under-count it — walk the rest, up to [EVENT_MAX]. Only worth
+        // paging when the first page came back full.
+        val events = first.events.mapTo(mutableListOf()) { it.toDocumentViewEventItem() }
+        var truncated = false
+        if (first.events.size == PAGE) {
+            while (events.size < first.totalEvents) {
+                if (events.size >= EVENT_MAX) {
+                    truncated = true
+                    break
+                }
+                val page = api.getDocumentUsage(
+                    from, to,
+                    documentId = documentId,
+                    documentsLimit = 1,
+                    eventsLimit = PAGE,
+                    eventsOffset = events.size,
+                ).bodyOrThrow()
+                if (page.events.isEmpty()) break
+                page.events.mapTo(events) { it.toDocumentViewEventItem() }
+                if (page.events.size < PAGE) break
+            }
+        }
+        return first.toDocumentUsageDetail(documentId, events, truncated)
     }
 
-    override suspend fun loadSkDetail(skId: String): SkDetail? {
-        val range = defaultRange()
+    override suspend fun loadSkDetail(skId: String, range: DateRange): SkDetail? {
         val from = range.fromMillis.toApiDate()
         val to = range.toMillis.toApiDate()
 
@@ -217,6 +244,12 @@ class ApiPODashboardDataSource(
         const val TOP_K = 20        // ranked top-searched rows to fetch
         /** `top_limit` caps lower than the page limits. */
         const val DOCUMENT_TOP_LIMIT_MAX = 50
+        /**
+         * Ceiling on the opens pulled for one document's drill-down. A heavily
+         * read document would otherwise cost a call per 100 opens; past this the
+         * screen says so rather than showing a silently partial list.
+         */
+        const val EVENT_MAX = PAGE * 10
     }
 }
 
@@ -240,19 +273,71 @@ internal fun Long.toApiDate(): String =
     Instant.ofEpochMilli(this).atZone(ZoneOffset.UTC).toLocalDate().toString()
 
 /**
+ * ISO-8601 timestamp/date → the instant it names, or null if it is blank or
+ * unparseable. Accepts all four shapes the dashboard routes emit: an offset
+ * timestamp, a `Z` instant, a zone-less timestamp, and a plain date. The
+ * zone-less case is the common one — these values come from ClickHouse
+ * `DateTime64(3)` columns, which carry no zone, so the API renders them bare;
+ * they are UTC by column convention (`timestamp_utc`) and read as such.
+ */
+internal fun parseApiInstant(iso: String?): Instant? {
+    if (iso.isNullOrBlank()) return null
+    return runCatching { OffsetDateTime.parse(iso).toInstant() }
+        .recoverCatching { Instant.parse(iso) }
+        .recoverCatching { LocalDateTime.parse(iso).toInstant(ZoneOffset.UTC) }
+        .recoverCatching { LocalDate.parse(iso).atStartOfDay(ZoneOffset.UTC).toInstant() }
+        .getOrNull()
+}
+
+/**
+ * ISO-8601 timestamp/date → the calendar day it falls on for the reader. A bare
+ * date is already a calendar day and is taken as-is; anything carrying a time is
+ * an instant, and lands on whichever day it is in the device's zone.
+ */
+private fun apiLocalDate(iso: String?): LocalDate? {
+    if (iso.isNullOrBlank()) return null
+    return runCatching { LocalDate.parse(iso) }
+        .getOrNull()
+        ?: parseApiInstant(iso)?.atZone(ZoneId.systemDefault())?.toLocalDate()
+}
+
+/**
  * ISO-8601 timestamp/date → a short relative label ("Today" / "Yesterday" /
  * "N days ago"). Blank on null/unparseable input.
  */
 internal fun relativeDayLabel(iso: String?): String {
-    if (iso.isNullOrBlank()) return ""
-    val date = runCatching { OffsetDateTime.parse(iso).toLocalDate() }
-        .recoverCatching { Instant.parse(iso).atZone(ZoneOffset.UTC).toLocalDate() }
-        .recoverCatching { LocalDate.parse(iso) }
-        .getOrNull() ?: return ""
-    val days = ChronoUnit.DAYS.between(date, LocalDate.now(ZoneOffset.UTC))
+    val date = apiLocalDate(iso) ?: return ""
+    val days = ChronoUnit.DAYS.between(date, LocalDate.now(ZoneId.systemDefault()))
     return when {
         days <= 0L -> "Today"
         days == 1L -> "Yesterday"
         else -> "$days days ago"
     }
 }
+
+/**
+ * ISO-8601 timestamp → the day plus the time of day: "Today · 10:23" and
+ * "Yesterday · 08:04" while the relative day still reads naturally, then an
+ * absolute "15 Aug · 14:30" beyond that. Rendered in the device's zone, since
+ * the reader of this screen is asking when their team opened the document.
+ * Blank on null/unparseable input.
+ */
+internal fun relativeDateTimeLabel(iso: String?): String {
+    // A bare date carries no time to show — zoning its UTC midnight would invent
+    // one — so it degrades to the day-only label.
+    if (iso != null && runCatching { LocalDate.parse(iso) }.isSuccess) return relativeDayLabel(iso)
+    val instant = parseApiInstant(iso) ?: return ""
+    val zoned = instant.atZone(ZoneId.systemDefault())
+    val days = ChronoUnit.DAYS.between(zoned.toLocalDate(), LocalDate.now(ZoneId.systemDefault()))
+    val day = when {
+        days <= 0L -> "Today"
+        days == 1L -> "Yesterday"
+        else -> zoned.toLocalDate().format(ABSOLUTE_DATE)
+    }
+    return "$day · ${zoned.toLocalTime().format(TIME_OF_DAY)}"
+}
+
+// Fixed-locale patterns: these sit beside the hard-coded "Today"/"Yesterday"
+// above, so a locale-varying month name would read half-translated.
+private val TIME_OF_DAY = DateTimeFormatter.ofPattern("HH:mm", Locale.US)
+private val ABSOLUTE_DATE = DateTimeFormatter.ofPattern("d MMM", Locale.US)

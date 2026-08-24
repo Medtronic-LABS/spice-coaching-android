@@ -9,6 +9,19 @@ import com.medtroniclabs.microcoaching.data.db.entity.AssignedVideoEntity
 import kotlinx.coroutines.flow.Flow
 
 /**
+ * Percent-watched at or above which a video counts as finished for the home-tile
+ * indicator.
+ *
+ * `completed` is only ever set by the player reaching `STATE_ENDED`, so a CHW who
+ * watches to the last few seconds and backs out keeps a row at `completed = 0`
+ * that nothing can later clear. Treating the tail as finished stops the tile
+ * advertising work that is, in practice, done. Deliberately applied to the
+ * indicator only — `completed` itself still means "played to the end", which is
+ * what watch-progress telemetry reports.
+ */
+const val VIDEO_FINISHED_PERCENT = 95.0
+
+/**
  * Read/reconcile access for the per-CHW assigned-video catalogue that backs the
  * Training sub-tab. The list is server-authoritative for metadata but the
  * progress columns are device-authoritative between syncs, so the mutating
@@ -33,8 +46,15 @@ interface AssignedVideoDao {
     @Query("SELECT COUNT(*) FROM assigned_video WHERE chw_id = :chwId")
     suspend fun countForUser(chwId: String): Int
 
-    /** True while [chwId] has at least one assigned video not yet completed. EXISTS avoids loading rows. */
-    @Query("SELECT EXISTS(SELECT 1 FROM assigned_video WHERE chw_id = :chwId AND completed = 0)")
+    /**
+     * True while [chwId] has at least one assigned video still worth watching —
+     * neither played to the end nor watched past [VIDEO_FINISHED_PERCENT].
+     * EXISTS avoids loading rows.
+     */
+    @Query(
+        "SELECT EXISTS(SELECT 1 FROM assigned_video WHERE chw_id = :chwId " +
+            "AND completed = 0 AND percent_watched < $VIDEO_FINISHED_PERCENT)",
+    )
     fun hasIncompleteFlow(chwId: String): Flow<Boolean>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)

@@ -18,11 +18,15 @@ sealed class SearchedModuleDetailUiState {
 
 /**
  * Backs the "Top Searched Existing" drill-down for one module, keyed by [moduleId].
- * Loads over the same default window as the dashboard tab.
+ *
+ * [range] is the window the PO had selected on the tab, passed down through the route
+ * so this screen's figures cover the same period as the row that was tapped. Falls back
+ * to [defaultRange] only when a caller has none.
  */
 class SearchedModuleDetailViewModel(
     private val moduleId: String,
     private val source: PODashboardDataSource,
+    private val range: DateRange = defaultRange(),
     val networkAvailable: StateFlow<Boolean> = MicroCoachingSDK.getInstance().networkAvailable,
 ) : ViewModel() {
 
@@ -37,7 +41,7 @@ class SearchedModuleDetailViewModel(
     private fun load() {
         _uiState.value = SearchedModuleDetailUiState.Loading
         viewModelScope.launch {
-            _uiState.value = runCatching { source.loadSearchedModuleDetail(moduleId, defaultRange()) }
+            _uiState.value = runCatching { source.loadSearchedModuleDetail(moduleId, range) }
                 .fold(
                     onSuccess = { detail ->
                         if (detail != null) SearchedModuleDetailUiState.Ready(detail)
@@ -51,11 +55,12 @@ class SearchedModuleDetailViewModel(
     companion object {
         fun factory(
             moduleId: String,
+            range: DateRange = defaultRange(),
             source: PODashboardDataSource = ApiPODashboardDataSource(),
         ): ViewModelProvider.Factory = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T =
-                SearchedModuleDetailViewModel(moduleId, source) as T
+                SearchedModuleDetailViewModel(moduleId, source, range) as T
         }
     }
 }

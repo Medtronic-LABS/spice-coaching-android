@@ -50,13 +50,13 @@ import com.medtroniclabs.microcoaching.R
 enum class DownloadItemIcon { AiSparkle, Microphone, ReadAloud }
 
 /**
- * Compact card showing a single downloadable asset (AI model or voice model)
- * with inline status + actions. Designed for the redesigned
- * [CoachingSetupContent] but reusable for any "list of pending downloads" UX.
+ * Compact card showing a single downloadable asset with inline status and actions. Used by the
+ * answering sheet for the optional on-device model, and reusable for any "list of pending
+ * downloads" UX.
  *
  * Action buttons reflect [state]:
  *   - [DownloadItemUiState.Idle] / [DownloadItemUiState.Failed] → Download / Retry
- *   - [DownloadItemUiState.Downloading] / Preparing → Pause + Cancel
+ *   - [DownloadItemUiState.Downloading] / Preparing / WaitingForNetwork → Pause + Cancel
  *   - [DownloadItemUiState.Extracting] → spinner only (extraction is short and uncancellable)
  *   - [DownloadItemUiState.Paused] → Resume + Cancel
  *   - [DownloadItemUiState.Done] → green check, no actions
@@ -118,6 +118,7 @@ fun DownloadItemCard(
             // ── Optional progress + cancel row ───────────────────────────────
             val progressRow = state is DownloadItemUiState.Downloading ||
                 state is DownloadItemUiState.Preparing ||
+                state is DownloadItemUiState.WaitingForNetwork ||
                 state is DownloadItemUiState.Paused
             if (progressRow) {
                 Spacer(Modifier.height(10.dp))
@@ -179,6 +180,13 @@ private fun SubtitleRow(
         is DownloadItemUiState.Unusable -> stringResource(R.string.download_card_ai_damaged)
         is DownloadItemUiState.Preparing ->
             stringResource(R.string.download_card_status_preparing)
+        is DownloadItemUiState.WaitingForNetwork -> stringResource(
+            if (state.wifiOnly) {
+                R.string.download_card_status_waiting_wifi
+            } else {
+                R.string.download_card_status_waiting_network
+            },
+        )
         is DownloadItemUiState.Extracting ->
             stringResource(R.string.download_card_status_extracting)
         is DownloadItemUiState.Paused ->
@@ -227,7 +235,12 @@ private fun TrailingAction(
                 Text(stringResource(R.string.download_card_action_resume))
             }
         }
-        is DownloadItemUiState.Downloading, is DownloadItemUiState.Preparing -> {
+        is DownloadItemUiState.Downloading,
+        is DownloadItemUiState.Preparing,
+        // Pausable while constraint-blocked too: the transfer is scheduled, and a user who
+        // does not want it resuming the moment Wi-Fi returns needs a way to say so.
+        is DownloadItemUiState.WaitingForNetwork,
+        -> {
             IconButton(onClick = onPause) {
                 Icon(
                     imageVector = Icons.Filled.Pause,
@@ -282,6 +295,19 @@ private fun ProgressRow(
             percent = 0
             statusText = stringResource(R.string.download_card_status_preparing)
             indeterminate = true
+        }
+        is DownloadItemUiState.WaitingForNetwork -> {
+            percent = state.progressPercent.coerceAtLeast(0)
+            statusText = stringResource(
+                if (state.wifiOnly) {
+                    R.string.download_card_status_waiting_wifi
+                } else {
+                    R.string.download_card_status_waiting_network
+                },
+            )
+            // Nothing is being transferred, so an animated bar would imply movement. A
+            // determinate bar parked at the bytes already received is the honest picture.
+            indeterminate = false
         }
         is DownloadItemUiState.Paused -> {
             percent = state.progressPercent

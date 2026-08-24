@@ -60,13 +60,13 @@ import com.medtroniclabs.microcoaching.util.shortDateTimeLabel
 @Composable
 fun PODashboardTab(
     chwId: String,
-    onOpenActiveSks: (SkStatus) -> Unit,
-    onOpenChatbotUsage: () -> Unit,
-    onOpenModulesCompleted: () -> Unit,
-    onOpenSkDetail: (String) -> Unit,
-    onOpenSearchedModule: (String) -> Unit,
+    onOpenActiveSks: (SkStatus, DateRange) -> Unit,
+    onOpenChatbotUsage: (DateRange) -> Unit,
+    onOpenModulesCompleted: (DateRange) -> Unit,
+    onOpenSkDetail: (String, DateRange) -> Unit,
+    onOpenSearchedModule: (String, DateRange) -> Unit,
     onOpenSuggestion: (String) -> Unit,
-    onOpenDocument: (String) -> Unit,
+    onOpenDocument: (String, DateRange) -> Unit,
     onShowAllSection: (PoDashboardSection, DateRange) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -92,6 +92,8 @@ fun PODashboardTab(
                 // Freshness of the on-screen dashboard numbers — mirrors the
                 // coaching header's "Last synced …" subtitle, but sourced from the
                 // dashboard's own live loads (see PODashboardViewModel.lastLoadedAt).
+                // Right-aligned: it annotates the data rather than labelling the
+                // picker below, and the From/To fields already say what the range is.
                 Text(
                     text = if (lastLoadedAt <= 0L) {
                         stringResource(R.string.modules_last_synced_never)
@@ -100,8 +102,9 @@ fun PODashboardTab(
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = MutedText,
+                    textAlign = TextAlign.End,
+                    modifier = Modifier.fillMaxWidth(),
                 )
-                Text(stringResource(R.string.po_showing_data_for), style = MaterialTheme.typography.bodyMedium)
                 DateRangeSelector(
                     fromMillis = range.fromMillis,
                     toMillis = range.toMillis,
@@ -153,13 +156,13 @@ private const val SECTION_PREVIEW_LIMIT = 5
 private fun DashboardBody(
     dashboard: PoDashboard,
     expandedModules: androidx.compose.runtime.snapshots.SnapshotStateMap<Int, Boolean>,
-    onOpenActiveSks: (SkStatus) -> Unit,
-    onOpenChatbotUsage: () -> Unit,
-    onOpenModulesCompleted: () -> Unit,
-    onOpenSkDetail: (String) -> Unit,
-    onOpenSearchedModule: (String) -> Unit,
+    onOpenActiveSks: (SkStatus, DateRange) -> Unit,
+    onOpenChatbotUsage: (DateRange) -> Unit,
+    onOpenModulesCompleted: (DateRange) -> Unit,
+    onOpenSkDetail: (String, DateRange) -> Unit,
+    onOpenSearchedModule: (String, DateRange) -> Unit,
     onOpenSuggestion: (String) -> Unit,
-    onOpenDocument: (String) -> Unit,
+    onOpenDocument: (String, DateRange) -> Unit,
     onShowAllSection: (PoDashboardSection, DateRange) -> Unit,
 ) {
     val d = dashboard
@@ -182,10 +185,10 @@ private fun DashboardBody(
                     metric = metric,
                     onClick = {
                         when (metric.key) {
-                            MetricKey.ACTIVE_NOW -> onOpenActiveSks(SkStatus.ACTIVE)
-                            MetricKey.INACTIVE -> onOpenActiveSks(SkStatus.INACTIVE)
-                            MetricKey.FINISHED_MODULES -> onOpenModulesCompleted()
-                            MetricKey.CHATBOT_ENGAGED -> onOpenChatbotUsage()
+                            MetricKey.ACTIVE_NOW -> onOpenActiveSks(SkStatus.ACTIVE, d.range)
+                            MetricKey.INACTIVE -> onOpenActiveSks(SkStatus.INACTIVE, d.range)
+                            MetricKey.FINISHED_MODULES -> onOpenModulesCompleted(d.range)
+                            MetricKey.CHATBOT_ENGAGED -> onOpenChatbotUsage(d.range)
                         }
                     },
                 )
@@ -202,7 +205,7 @@ private fun DashboardBody(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 d.sks.take(SECTION_PREVIEW_LIMIT).forEach { sk ->
-                    SkListRow(sk = sk, onClick = { onOpenSkDetail(sk.id) })
+                    SkListRow(sk = sk, onClick = { onOpenSkDetail(sk.id, d.range) })
                 }
             }
             if (d.sks.size > SECTION_PREVIEW_LIMIT) {
@@ -243,7 +246,7 @@ private fun DashboardBody(
         TopQueriesCard(
             d.topSearchedExisting.take(SECTION_PREVIEW_LIMIT),
             modifier = Modifier.padding(horizontal = 16.dp),
-            onItemClick = { it.id?.let(onOpenSearchedModule) },
+            onItemClick = { m -> m.id?.let { onOpenSearchedModule(it, d.range) } },
         )
         if (d.topSearchedExistingTotal > SECTION_PREVIEW_LIMIT) {
             ShowAllRow(d.topSearchedExistingTotal) { onShowAllSection(PoDashboardSection.SEARCHED_EXISTING, d.range) }
@@ -289,7 +292,7 @@ private fun DashboardBody(
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             d.documentUsage.take(SECTION_PREVIEW_LIMIT).forEach { doc ->
-                DocumentUsageListRow(row = doc, onClick = { onOpenDocument(doc.documentId) })
+                DocumentUsageListRow(row = doc, onClick = { onOpenDocument(doc.documentId, d.range) })
             }
         }
         if (d.documentUsageTotal > SECTION_PREVIEW_LIMIT) {

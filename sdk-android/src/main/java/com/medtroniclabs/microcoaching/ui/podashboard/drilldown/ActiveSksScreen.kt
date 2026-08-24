@@ -29,11 +29,13 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.medtroniclabs.microcoaching.R
 import com.medtroniclabs.microcoaching.ui.common.AvatarCircle
 import com.medtroniclabs.microcoaching.ui.common.CenterProgress
 import com.medtroniclabs.microcoaching.ui.common.SdkScreenHeader
+import com.medtroniclabs.microcoaching.ui.podashboard.DateRange
 import com.medtroniclabs.microcoaching.ui.podashboard.PODashboardUiState
 import com.medtroniclabs.microcoaching.ui.podashboard.PODashboardViewModel
 import com.medtroniclabs.microcoaching.ui.podashboard.SkStatus
@@ -46,21 +48,25 @@ import com.medtroniclabs.microcoaching.ui.theme.SurfaceMuted
 
 private val DividerColor = Color(0xFFEFEFF3)
 
-/** "Active this week" — SKs grouped by status (Active / Needs attention / Inactive). */
 /**
  * SKs for one KPI card, scoped to a single [status] (responsive vs non-responsive) — the card
  * the PO tapped decides which. Only that group renders; an empty group shows a message rather
  * than the other status's SKs.
+ *
+ * [range] is the window the KPI card was counted over. It has to be passed in: this screen is
+ * its own nav destination and so gets its own view model, which would otherwise load the
+ * default last-7-days window and disagree with the card the PO just tapped.
  */
 @Composable
 fun ActiveSksScreen(
     chwId: String,
     status: SkStatus,
+    range: DateRange,
     onBack: () -> Unit,
     onHome: () -> Unit,
     onOpenSkDetail: (String) -> Unit,
 ) {
-    val vm: PODashboardViewModel = viewModel(factory = PODashboardViewModel.factory(chwId))
+    val vm: PODashboardViewModel = viewModel(factory = PODashboardViewModel.factory(chwId, range))
     val state by vm.uiState.collectAsState()
     val networkAvailable by vm.networkAvailable.collectAsState()
 
@@ -131,7 +137,14 @@ private fun StatusGroup(
             ) {
                 AvatarCircle(sk.name, size = 44.dp, containerColor = statusBg(status), contentColor = statusFg(status))
                 Spacer(Modifier.width(12.dp))
-                Text(sk.name, modifier = Modifier.weight(1f), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    text = sk.name,
+                    modifier = Modifier.weight(1f),
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
                 Text(sk.lastSeenLabel, color = MutedText, style = MaterialTheme.typography.bodySmall)
                 Spacer(Modifier.width(4.dp))
                 Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = MutedText)

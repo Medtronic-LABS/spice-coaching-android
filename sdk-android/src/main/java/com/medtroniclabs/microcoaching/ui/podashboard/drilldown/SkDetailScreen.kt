@@ -37,12 +37,15 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.medtroniclabs.microcoaching.ui.podashboard.components.FREE_TEXT_MAX_LINES
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.medtroniclabs.microcoaching.R
 import com.medtroniclabs.microcoaching.ui.common.AvatarCircle
 import com.medtroniclabs.microcoaching.ui.common.CenterProgress
 import com.medtroniclabs.microcoaching.ui.common.SdkScreenHeader
+import com.medtroniclabs.microcoaching.ui.podashboard.DateRange
 import com.medtroniclabs.microcoaching.ui.podashboard.SkDetail
 import com.medtroniclabs.microcoaching.ui.podashboard.SkDetailUiState
 import com.medtroniclabs.microcoaching.ui.podashboard.SkDetailViewModel
@@ -63,8 +66,8 @@ private val HeaderGradientEnd = Color(0xFF2563EB)
 
 /** "My SK" — one SK's profile: summary metrics, module checklist, activity, top queries. */
 @Composable
-fun SkDetailScreen(skId: String, onBack: () -> Unit, onHome: () -> Unit) {
-    val vm: SkDetailViewModel = viewModel(factory = SkDetailViewModel.factory(skId))
+fun SkDetailScreen(skId: String, range: DateRange, onBack: () -> Unit, onHome: () -> Unit) {
+    val vm: SkDetailViewModel = viewModel(factory = SkDetailViewModel.factory(skId, range))
     val state by vm.uiState.collectAsState()
     val networkAvailable by vm.networkAvailable.collectAsState()
 
@@ -141,7 +144,14 @@ private fun SkDetailHeader(d: SkDetail, onBack: () -> Unit, onHome: () -> Unit) 
                 AvatarCircle(d.name, size = 64.dp, containerColor = Color.White.copy(alpha = 0.2f), contentColor = Color.White)
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
-                    Text(d.name, color = Color.White, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
+                    Text(
+                        text = d.name,
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleLarge,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
                     /*Text(
                         text = d.location.ifBlank { stringResource(R.string.po_na) },
                         color = Color.White.copy(alpha = 0.8f),
@@ -196,7 +206,13 @@ private fun ModuleStatusRow(m: SkModuleStatus) {
             tint = if (m.done) StatusGreen else MutedText,
         )
         Spacer(Modifier.width(12.dp))
-        Text(m.name, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+        Text(
+            text = m.name,
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.bodyMedium,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
         val (labelRes, fg, bg) = if (m.done) {
             Triple(R.string.po_sk_module_done, StatusGreen, StatusGreenBg)
         } else {
@@ -238,6 +254,8 @@ private fun ActivityRow(label: String, value: String) {
             fontWeight = FontWeight.Bold,
             style = MaterialTheme.typography.bodyMedium,
             textAlign = TextAlign.End,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f),
         )
     }
@@ -267,7 +285,14 @@ private fun TopQueryRow(q: TopQuery) {
             Text("${q.rank}", color = SpiceBlueDark, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.labelSmall)
         }
         Spacer(Modifier.width(12.dp))
-        Text(q.text, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+        Text(
+            text = q.text,
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.bodyMedium,
+            maxLines = FREE_TEXT_MAX_LINES,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Spacer(Modifier.width(8.dp))
         Text("${q.count}", color = SpiceBlue, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
     }
 }

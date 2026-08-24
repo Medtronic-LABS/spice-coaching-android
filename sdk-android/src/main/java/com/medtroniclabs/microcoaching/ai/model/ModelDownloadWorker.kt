@@ -38,7 +38,8 @@ import java.util.concurrent.TimeUnit
  * On success, [KEY_FILE_PATH] in output data holds the absolute path to the model file.
  * [ModelManager] observes this worker's [WorkInfo][androidx.work.WorkInfo] to update [ModelState].
  *
- * Backend endpoint: `{backendUrl}/api/v1/models/gemma/download`
+ * Backend endpoint: `{backendUrl}/api/v1/models/gemma/download` — serves a `.task`, which
+ * no bundled engine loads, so this provider is skipped (see [tryBackend]).
  * HuggingFace endpoint: the selected [ModelCatalog] variant's `downloadUrl`
  * (overridable via [MicroCoachingConfig.huggingFaceModelUrl]).
  */
@@ -143,6 +144,18 @@ class ModelDownloadWorker(
             return DownloadOutcome.Failure("backendUrl not configured — set via Builder.backendUrl()")
         }
 
+        // This endpoint serves a `.task`, which no bundled engine can load, so its bytes
+        // are certain to fail validation — after transferring hundreds of megabytes over
+        // what may be a metered field connection. Skipping to the next provider is the
+        // difference between one wasted download per device and none. Using this provider
+        // again means serving `.litertlm` from it.
+        if (!variant.fileName.endsWith(".task")) {
+            return DownloadOutcome.Failure(
+                "backend endpoint serves a Gemma .task, which no bundled engine loads — " +
+                    "'${variant.fileName}' must come from another provider",
+            )
+        }
+
         val authToken = inputData.getString(KEY_AUTH_TOKEN) ?: ""
         val downloadUrl = "${backendUrl.trimEnd('/')}/api/v1/models/gemma/download"
         // Write to the variant's filename so on-disk resolution (ModelManager /
@@ -186,7 +199,7 @@ class ModelDownloadWorker(
 
         if (hfToken.isBlank() && variant.requiresAccessToken) {
             Log.w(TAG, "[HF] token=<BLANK> but model '${variant.id}' is gated — download will fail")
-        } else if (BuildConfig.DEBUG) {
+        } else if (BuildConfig.DEBUG && hfToken.isNotBlank()) {
             Log.d(TAG, "[HF] token=${hfToken.take(1)}…${hfToken.takeLast(1)} (len=${hfToken.length})")
         }
         if (BuildConfig.DEBUG) {
@@ -194,11 +207,22 @@ class ModelDownloadWorker(
             Log.d(TAG, "[HF] outputFile=${outputFile.absolutePath}")
         }
 
+        // Send the token only where it can help. On an ungated repo — which the default
+        // Qwen3 variant is — a stale or revoked token turns a download that would have
+        // worked anonymously into a 401, and there is no reason to hand credentials to a
+        // public URL either. A host `huggingFaceModelUrl` override is the exception: it may
+        // well point at a gated file the catalog knows nothing about, so it keeps the token.
+        val usesHostUrl = hfUrl != variant.downloadUrl
+        val sendToken = hfToken.isNotBlank() && (variant.requiresAccessToken || usesHostUrl)
         val headers = buildMap<String, String> {
-            if (hfToken.isNotBlank()) put("Authorization", "Bearer $hfToken")
+            if (sendToken) put("Authorization", "Bearer $hfToken")
         }
         if (BuildConfig.DEBUG) {
-            Log.d(TAG, "[HF] Authorization header present=${headers.containsKey("Authorization")}")
+            Log.d(
+                TAG,
+                "[HF] Authorization header present=${headers.containsKey("Authorization")} " +
+                    "(gated=${variant.requiresAccessToken}, hostUrlOverride=$usesHostUrl)",
+            )
         }
 
         return streamDownload(
@@ -214,11 +238,24 @@ class ModelDownloadWorker(
     // ── Completeness validation ───────────────────────────────────────────────
 
     /**
-     * Structural check for [variant]'s format, or null when there is none. Only `.task` is
-     * a zip; judging a `.litertlm` by zip rules would reject every good file.
+     * Structural check for [variant]'s format, or null when there is none. The expected
+     * length has to be passed in, because nothing inside the container proves the transfer
+     * finished.
+     *
+     * That length is whatever the host has said: the `Content-Length` observed for this
+     * variant — [ModelSizeProbe.recordObservedSize] caches it as this very download
+     * progresses — falling back to the catalog's figure on a first run.
      */
     private fun validatorFor(variant: ModelVariant): ((File) -> String?)? =
-        if (ModelCatalog.isTaskBundle(variant)) ModelFileIntegrity::validateTaskBundle else null
+        if (ModelCatalog.isLiteRtLmBundle(variant)) {
+            { file ->
+                val expected = ModelSizeProbe.cachedSize(applicationContext, variant)
+                    ?: variant.sizeInBytes
+                ModelFileIntegrity.validateLiteRtLmBundle(file, expected)
+            }
+        } else {
+            null
+        }
 
     /**
      * Caches the served `Content-Length` so the displayed size comes from the host instead

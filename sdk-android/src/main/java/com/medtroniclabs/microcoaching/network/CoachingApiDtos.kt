@@ -35,7 +35,9 @@ data class TelemetryBatch(
  * serialised into this shape. LlmTrace and DigitalProficiency store entity-specific
  * fields in [payloadJson].
  *
- * [eventDate] is derived from [timestampLocal] at mapper time (YYYY-MM-DD, UTC).
+ * [timestampUtc] and [timestampLocal] differ by the device's UTC offset, and
+ * [eventDate] (YYYY-MM-DD) is the local day — all three derived at mapper time
+ * from the single UTC epoch Room stores.
  */
 @Serializable
 data class TelemetryEventPayload(
@@ -227,13 +229,21 @@ data class ModuleSyncPayload(
 }
 
 /**
- * One rich source-document reference from the module sync payload's
- * `source_documents` array. Only the fields the SDK renders/dereferences are
- * modelled; the rest of the backend object is ignored (`ignoreUnknownKeys`).
+ * One rich source-document reference from a `source_documents` array — the module
+ * sync payload and the chat RAG response share this shape. Only the fields the SDK
+ * renders/dereferences are modelled; the rest of the backend object is ignored
+ * (`ignoreUnknownKeys`).
  *
  * Reused as the persisted + UI shape (module_cache / chat_messages
  * `source_documents_json`, [com.medtroniclabs.microcoaching.ui.chat.ChatMessage]),
  * so the same serializer round-trips wire → Room → UI.
+ *
+ * [presignedUrl] and [storagePath] are what open a cited document the device has
+ * never synced: one linked to no published module and assigned to nobody reaches
+ * neither local catalogue, so [SourceDocumentUrlStore] cannot resolve it. The RAG
+ * response carries both; the module payload carries only the path, which is enough
+ * to re-sign. Either may be absent, and the URL is short-lived — treat it as a
+ * starting point and re-sign from [storagePath] once it lapses.
  */
 @Serializable
 data class SourceDocumentRef(
@@ -241,6 +251,8 @@ data class SourceDocumentRef(
     @SerialName("title") val title: String? = null,
     @SerialName("original_filename") val originalFilename: String? = null,
     @SerialName("has_thumbnail") val hasThumbnail: Boolean = false,
+    @SerialName("presigned_url") val presignedUrl: String? = null,
+    @SerialName("storage_path") val storagePath: String? = null,
 )
 
 // ── Source-document catalogue (GET /sync/source-documents) ────────────────────
@@ -657,12 +669,14 @@ data class RagSourceDocument(
     @SerialName("page_numbers") val pageNumbers: List<Int> = emptyList(),
     @SerialName("source_pages") val sourcePages: List<RagSourcePage> = emptyList(),
     /**
-     * Presigned URL returned inline by the backend. Captured for future optimisation
-     * (skipping the separate getSourceDocumentPresignedUrls call) but not used yet —
-     * DocumentPreviewActivity always fetches via the existing endpoint.
+     * Presigned URL for the document, valid for [presignedExpiresSeconds]. Carried
+     * onto the citation's [SourceDocumentRef] because it is the only way to open a
+     * document the device has never synced.
      */
     @SerialName("presigned_url") val presignedUrl: String? = null,
     @SerialName("presigned_expires_seconds") val presignedExpiresSeconds: Int? = null,
+    /** Object-storage path, used to re-sign once [presignedUrl] lapses. */
+    @SerialName("storage_path") val storagePath: String? = null,
     @SerialName("linked_module_ids") val linkedModuleIds: List<String> = emptyList(),
 )
 

@@ -31,6 +31,8 @@ import com.medtroniclabs.microcoaching.sdk.morning.MorningSurfaceCoordinator
 import com.medtroniclabs.microcoaching.sdk.morning.PersonaPolicy
 import com.medtroniclabs.microcoaching.sdk.morning.SkippedRefresherStore
 import com.medtroniclabs.microcoaching.sdk.runtime.SdkNetworkMonitor
+import com.medtroniclabs.microcoaching.ai.model.LocalModelChoice
+import com.medtroniclabs.microcoaching.ai.model.LocalModelPrefs
 import com.medtroniclabs.microcoaching.ai.model.ModelCatalog
 import com.medtroniclabs.microcoaching.ai.model.ModelProvider
 import com.medtroniclabs.microcoaching.ai.model.ModelVariant
@@ -500,6 +502,24 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
     val modelManager: ModelManager by modelManagerLazy
 
     /**
+     * Whether the user wants the on-device model used, and whether its offer may still be
+     * shown. Read before any download is scheduled: the file is hundreds of megabytes of
+     * someone's storage and data, so its presence follows from a choice rather than from
+     * hardware being capable of holding it.
+     */
+    val localModelPrefs: LocalModelPrefs by lazy { LocalModelPrefs(config.context) }
+
+    /**
+     * True when this device may host the on-device model AND the user has opted into it.
+     *
+     * The pairing is what callers actually need: eligibility alone says the hardware could run
+     * a model that may not be wanted, and consent alone says a model is wanted on hardware
+     * that may not survive it.
+     */
+    val localModelEnabled: Boolean
+        get() = !isLowEndDevice && localModelPrefs.choice.value == LocalModelChoice.ENABLED
+
+    /**
      * The on-device model this SDK will download/load — the source of truth for its
      * display name, param count, [ModelVariant.sizeInBytes], runtime and RAM class.
      * Hosts use it to render an accurate download-size label.
@@ -753,19 +773,17 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
     /**
      * Call when the CHW finishes a patient visit. Backfills `patient_visit_id` on
      * this visit's still-pending coaching_event rows (written by
-     * [onAssessmentSubmitted] before the encounterId was final), emits `session_end`,
-     * and triggers a sync push.
+     * [onAssessmentSubmitted] before the encounterId was final) and triggers a
+     * sync push.
      *
      * @param encounterId SPICE encounter id; blank values are skipped.
      */
     fun onVisitCompleted(encounterId: String) {
         val chwId = currentCHWId ?: return
         sdkScope.launch {
-            val recorder = newSdkHookRecorder(chwId)
             visitCompletedHandler.handle(
                 chwId = chwId,
                 encounterId = encounterId,
-                recorder = recorder,
                 flush = { flushTelemetryNow() },
             )
         }
@@ -812,30 +830,18 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
 
     internal suspend fun refilterMorningModules(chwId: String) = morningCoordinator.refilter(chwId)
 
-    /** Call when SPICE surfaces a risk flag for the active patient. */
+    /**
+     * Call when SPICE surfaces a risk flag for the active patient. Runs the
+     * trigger evaluator only — no telemetry row is written, because nothing
+     * downstream reads one. `"risk_flag_observed"` here is a workflow-event
+     * code matched against `trigger_definition.predicate_json`, a separate
+     * namespace from `coaching_event.event_type`.
+     */
     fun onRiskFlagObserved(riskLevel: String, patientId: String? = null) {
         val chwId = currentCHWId ?: return
         val payload = mutableMapOf("risk_level" to riskLevel)
         if (patientId != null) payload["patient_id"] = patientId
         evaluateWorkflowSignal(chwId, "risk_flag_observed", payload)
-
-        // Also emit the wire-level `risk_flag_observed` row for the backend's
-        // clinical_observed feed (mid-visit escalation fires through here too).
-        sdkScope.launch {
-            try {
-                val recorder = newSdkHookRecorder(chwId)
-                val patientIdHash = patientId?.let { PatientIdHasher.hash(it) }
-                recorder.recordRiskFlagObserved(
-                    riskLevel = riskLevel,
-                    patientIdHash = patientIdHash,
-                    networkState = if (isNetworkAvailable()) "online" else "offline",
-                )
-            } catch (e: Exception) {
-                Log.w(TAG, "onRiskFlagObserved event emission failed: ${e.message}")
-            }
-            // Time-sensitive — push immediately (offline-safe; WorkManager queues).
-            flushTelemetryNow()
-        }
     }
 
     /** Call when SPICE reports an equipment anomaly (BP cuff, glucometer, …). */
@@ -1235,12 +1241,11 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
          */
         fun huggingFaceModelUrl(url: String) = apply { huggingFaceModelUrl = url }
         /**
-         * Pick which on-device model to download/load — an `id` from
-         * [com.medtroniclabs.microcoaching.ai.model.ModelCatalog.ALLOWLIST]
-         * (e.g. `"gemma3-270m-it-q8-task"`, `"gemma3-1b-it-int4-task"`).
-         * Default: [com.medtroniclabs.microcoaching.ai.model.ModelCatalog.DEFAULT_ID].
-         * An unknown id falls back to the default; a non-MediaPipe variant is
-         * accepted but warns (it can't load until the LiteRT-LM runtime is re-added).
+         * Pick which on-device model to download and load — an `id` from
+         * [com.medtroniclabs.microcoaching.ai.model.ModelCatalog.ALLOWLIST], defaulting to
+         * [com.medtroniclabs.microcoaching.ai.model.ModelCatalog.DEFAULT_ID]. An unknown id
+         * falls back to that default; a variant on an unbundled runtime is accepted but
+         * warns, since nothing can load it.
          */
         fun selectedModel(id: String) = apply {
             val variant = ModelCatalog.byId(id)
@@ -1248,7 +1253,7 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
                 variant == null ->
                     Log.w(TAG, "selectedModel('$id') is not in the allowlist — using default '${ModelCatalog.DEFAULT_ID}'")
                 !ModelCatalog.isRunnable(variant) ->
-                    Log.w(TAG, "selectedModel('$id') runtime=${variant.runtime} is not bundled — it won't load until the LiteRT-LM runtime is re-added")
+                    Log.w(TAG, "selectedModel('$id') runtime=${variant.runtime} is not bundled — no engine can load it")
             }
             selectedModelId = variant?.id ?: ModelCatalog.DEFAULT_ID
         }
@@ -1425,10 +1430,11 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
                 "modelPath=${config.modelPath.isNotBlank()} " +
                 "forcedMode=${config.forcedMode ?: "auto"}")
 
-            // Kick off the model download if configured for init — skipped on
-            // low-end devices (they never use the AI model).
+            // Kick off the model download if configured for init. Gated on consent as well as
+            // on hardware: the model is optional, so a device merely being capable of running
+            // it is not a reason to spend the user's data and storage on it.
             if (config.modelDownloadStrategy == ModelDownloadStrategy.ON_SDK_INIT &&
-                !sdk.isLowEndDevice
+                sdk.localModelEnabled
             ) {
                 sdk.modelManager.scheduleDownloadIfNeeded()
             }

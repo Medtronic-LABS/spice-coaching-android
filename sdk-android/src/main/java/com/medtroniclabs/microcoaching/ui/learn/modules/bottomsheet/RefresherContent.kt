@@ -15,6 +15,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.medtroniclabs.microcoaching.MicroCoachingSDK
+import com.medtroniclabs.microcoaching.domain.refresher.RefresherKind
 import com.medtroniclabs.microcoaching.ui.learn.finishQuiz
 import com.medtroniclabs.microcoaching.ui.learn.modules.QuickLearnViewModel
 import com.medtroniclabs.microcoaching.ui.learn.parseInlineQuiz
@@ -24,13 +25,13 @@ import com.medtroniclabs.microcoaching.ui.theme.QuizOptionSurface
 /**
  * Full refresher experience inside [RefresherBottomSheet].
  *
- * Two-phase state machine driven by [entryMode]. The quiz phase presents the module's
- * whole drill set (see `QuickLearnViewModel.reinforceSlice`), not a single question:
+ * The phases run from the refresher's own kind, so the sheet delivers exactly what the tile
+ * the CHW tapped advertised:
  *
- * **QUESTION_FIRST:** Phase 1 = quiz → Phase 2 = lesson cards → Done.
- *
- * **CARDS_FIRST** (every live entry point — home `MorningCard`, `QuizRefresherCard`
- * banner, Practice Zone tile): Phase 1 = lesson cards → Phase 2 = quiz → Done.
+ *  - [RefresherKind.QUIZ] — the drill only, no card phase.
+ *  - [RefresherKind.MICROCOACHING] — lesson cards, then the drill.
+ *  - [RefresherKind.LEARNING] — lesson cards only; finishing them records a completion so
+ *    the refresher retires (nothing else in this flow writes one).
  *
  * [targetModuleFamilyId] — when set (RefresherList tile flow), the content for
  * that specific module is shown instead of the first morning module.
@@ -42,25 +43,16 @@ import com.medtroniclabs.microcoaching.ui.theme.QuizOptionSurface
 fun RefresherContent(
     viewModel: QuickLearnViewModel,
     fromHomeScreen: Boolean = false,
-    entryMode: RefresherBottomSheet.EntryMode = RefresherBottomSheet.EntryMode.CARDS_FIRST,
     targetModuleFamilyId: String? = null,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
     queueFamilyIds: List<String> = emptyList(),
 ) {
-    // Resolve the target module ONCE at first composition and hold onto it
-    // for the lifetime of the sheet. The underlying `morningModulesSource`
-    // (sdk._morningModules) is reactive — every coaching_event insert triggers
-    // `refilterMorningModules`, which may drop this module from the list the
-    // moment its last open question is answered correctly. Without locking,
-    // PHASE_2 (lesson cards) would blank out mid-flow because targetEntity
-    // becomes null. Once the CHW has opened the sheet, the lesson lives on
-    // its own timeline; background refilters shouldn't yank it away.
-    // The sheet's queue is the SHARED source of truth with the modules screen:
-    // [queueFamilyIds] is exactly what the CHW saw (RefresherList + banner), and
-    // the sheet resolves those modules straight from the DB — so "Next refresher"
-    // chains only through them, never leaking extra modules from the broader
-    // morning set. The home-screen flow passes no ids and uses the morning set.
+    // The queue is locked at first composition. `morningModulesSource` is reactive and
+    // drops a module the moment its last question is answered, which would blank the
+    // sheet mid-flow; once opened, the lesson lives on its own timeline.
+    // [queueFamilyIds] is exactly the list the CHW saw, so "Next refresher" chains only
+    // through those. The home-screen flow passes none and uses the morning set.
     val useResolvedQueue = !fromHomeScreen && queueFamilyIds.isNotEmpty()
     LaunchedEffect(queueFamilyIds, useResolvedQueue) {
         if (useResolvedQueue) viewModel.loadRefresherQueue(queueFamilyIds)
@@ -96,52 +88,63 @@ fun RefresherContent(
     val cards = remember(targetEntity.cardsJson) { parseLessonCards(targetEntity.cardsJson) }
     val hasCards = cards.isNotEmpty()
 
-    // Whether the module *ships* any quiz at all — read straight from the entity
-    // (lang-independent presence check), so the flow can tell a genuinely
-    // quiz-less "Learning card" refresher from one that's merely still priming.
-    // [hasQuiz] below (the primed/filtered set) gates the quiz UI; this gates
-    // whether a quiz phase exists at all.
-    val moduleHasQuiz = remember(targetEntity.quizJson) {
-        parseInlineQuiz(targetEntity.quizJson).isNotEmpty()
-    }
-
-    // Prime the LearnViewModel with the wrong-answer-filtered question set.
-    // Triggers exactly once per module per sheet open.
+    // Prime the drill set and the kind for this module. Once per module per sheet open.
     LaunchedEffect(targetEntity.moduleFamilyId) {
         viewModel.primeRefresherQuiz(targetModuleFamilyId = targetEntity.moduleFamilyId)
     }
 
     val filteredQuestions by viewModel.filteredQuestionsForRefresher.collectAsState()
-    val hasQuiz = filteredQuestions.isNotEmpty()
+    val primedKind by viewModel.primedKind.collectAsState()
+
+    // Fall back to the module's shape when the family isn't on the refresher list (the
+    // home-screen flow reaches modules the classifier never saw).
+    val moduleHasQuiz = remember(targetEntity.quizJson) {
+        parseInlineQuiz(targetEntity.quizJson).isNotEmpty()
+    }
+    val kind = primedKind ?: when {
+        moduleHasQuiz && hasCards -> RefresherKind.MICROCOACHING
+        moduleHasQuiz -> RefresherKind.QUIZ
+        else -> RefresherKind.LEARNING
+    }
+    val runsCards = kind != RefresherKind.QUIZ && hasCards
+    val runsQuiz = kind != RefresherKind.LEARNING
+
+    // The quiz phase can't render before priming lands; the card phase has its content
+    // up front. Gating on the question set alone would hang a cards-only refresher,
+    // whose set is empty by design.
+    if (runsQuiz && filteredQuestions.isEmpty()) return
 
     var phase by remember { mutableStateOf(RefresherPhase.PHASE_1) }
     var cardIndex by rememberSaveable { mutableIntStateOf(0) }
 
-    // Bumped on retry to re-key the quiz composable. SharedQuizInProgressContent keeps
-    // its question index and per-question answers in remember/rememberSaveable and
-    // locks an answered question in review mode, so re-arming the question list alone
-    // would redisplay the finished attempt.
+    // Bumped on retry to re-key the quiz composable, which locks answered questions in
+    // review mode — re-arming the list alone would redisplay the finished attempt.
     var attemptKey by remember { mutableIntStateOf(0) }
-
-    val phase1IsQuiz = entryMode == RefresherBottomSheet.EntryMode.QUESTION_FIRST
 
     val autoSpeak by viewModel.autoSpeakEnabled.collectAsState()
 
-    // Re-drill the questions just attempted. Only offered where there is a quiz to
-    // redo; restartRefresherQuiz replays the SAME set (reshuffled) rather than
-    // re-filtering, which would shrink it as answers land. No finishQuiz() here — the
-    // per-answer telemetry has already been written, and the eventual
+    // Re-drill the questions just attempted. restartRefresherQuiz replays the SAME set
+    // (reshuffled) rather than re-filtering, which would shrink it as answers land. No
+    // finishQuiz() here — per-answer telemetry has already been written, and the eventual
     // "Next refresher" / "Done" still finishes the module.
-    val retryQuiz: (() -> Unit)? = if (moduleHasQuiz) {
+    val retryQuiz: (() -> Unit)? = if (runsQuiz) {
         {
             viewModel.restartRefresherQuiz()
             attemptKey++
-            // QUESTION_FIRST puts the quiz in phase 1; CARDS_FIRST in phase 2. Either
-            // way, go back to the phase that renders it.
-            phase = if (phase1IsQuiz) RefresherPhase.PHASE_1 else RefresherPhase.PHASE_2
+            phase = if (runsCards) RefresherPhase.PHASE_2 else RefresherPhase.PHASE_1
         }
     } else {
         null
+    }
+
+    // Reading the cards is the only way a cards-only refresher can ever be finished, and
+    // this sheet is the only place it happens — the lesson player's completion write is
+    // unreachable from here. Without it the refresher would re-surface forever.
+    val recordCardsRead = {
+        if (kind == RefresherKind.LEARNING) {
+            MicroCoachingSDK.getInstance()
+                .onModuleCardsCompleted(targetEntity.moduleFamilyId, targetEntity.moduleId)
+        }
     }
 
     // Terminal action set surfaced at the end of the modules-screen flow (instead of a
@@ -154,6 +157,7 @@ fun RefresherContent(
             hasNext = nextEntity != null,
             onNextRefresher = {
                 // Completing this module clears it from the skipped-badge set.
+                recordCardsRead()
                 MicroCoachingSDK.getInstance().clearRefresherSkipped(currentFamilyId)
                 val next = nextEntity
                 if (next != null) {
@@ -173,10 +177,8 @@ fun RefresherContent(
         )
     }
 
-    // End-of-flow fallback: reached only when there are no lesson cards to host
-    // the terminal actions (and by the home-screen flow). Clears the just-
-    // completed module from the skipped-badge set, then dismisses.
     val endFlow = {
+        recordCardsRead()
         MicroCoachingSDK.getInstance().clearRefresherSkipped(currentFamilyId)
         phase = RefresherPhase.DONE
     }
@@ -189,87 +191,41 @@ fun RefresherContent(
             onDismiss()
         }
 
+        // Cards, when this kind runs them. They carry the terminal actions themselves for
+        // a cards-only refresher, which has no quiz phase to host them.
         RefresherPhase.PHASE_1 -> {
-            if (phase1IsQuiz) {
-                // Quiz-less ("Learning card") module opened question-first — there
-                // is no quiz phase, so jump straight to the lesson cards.
-                if (!moduleHasQuiz) {
-                    phase = RefresherPhase.PHASE_2
-                    return
-                }
-                // Quiz phase: wait until primed.
-                if (!hasQuiz) return
-                key(attemptKey) {
-                SharedQuizInProgressContent(
-                    questions = filteredQuestions,
-                    viewModel = viewModel.learnViewModel,
-                    onAllAnswered = {
-                        // deferSync = true: the sheet still has lesson cards
-                        // ahead. The dismiss handler will flush+sync once the
-                        // CHW finishes the full experience — without this,
-                        // refilterMorningModules races the recomposition and
-                        // can blank PHASE_2 out.
-                        viewModel.learnViewModel.finishQuiz(deferSync = true)
-                        if (hasCards) {
-                            phase = RefresherPhase.PHASE_2
-                            cardIndex = 0
-                        } else {
-                            endFlow()
-                        }
-                    },
-                    modifier = modifier,
-                    onClose = onDismiss,
-                    optionContainerColor = QuizOptionSurface,
-                )
-                }
-            } else {
-                // CARDS_FIRST: lesson cards in phase 1.
-                if (!hasCards) {
-                    phase = RefresherPhase.PHASE_2
-                    return
-                }
-                RefresherCardSlide(
-                    cards = cards,
-                    cardIndex = cardIndex,
-                    onNext = {
-                        if (cardIndex < cards.size - 1) cardIndex++
-                        else { phase = RefresherPhase.PHASE_2; cardIndex = 0 }
-                    },
-                    modifier = modifier,
-                    autoSpeakEnabled = autoSpeak,
-                    onToggleAutoSpeak = viewModel::toggleAutoSpeak,
-                    onSpeak = { text, onDone -> viewModel.speakAloud(text, onDone) },
-                    onStopSpeak = viewModel::stopSpeaking,
-                )
+            if (!runsCards) {
+                phase = RefresherPhase.PHASE_2
+                return
             }
+            val cardsAreLast = !runsQuiz
+            RefresherCardSlide(
+                cards = cards,
+                cardIndex = cardIndex,
+                onNext = {
+                    if (cardIndex < cards.size - 1) cardIndex++
+                    else if (cardsAreLast) endFlow()
+                    else { phase = RefresherPhase.PHASE_2; cardIndex = 0 }
+                },
+                modifier = modifier,
+                autoSpeakEnabled = autoSpeak,
+                onToggleAutoSpeak = viewModel::toggleAutoSpeak,
+                onSpeak = { text, onDone -> viewModel.speakAloud(text, onDone) },
+                onStopSpeak = viewModel::stopSpeaking,
+                refresherActions = if (cardsAreLast) {
+                    refresherActions?.copy(
+                        onNextRefresher = { recordCardsRead(); refresherActions.onNextRefresher() },
+                        onDismiss = { recordCardsRead(); refresherActions.onDismiss() },
+                    )
+                } else {
+                    null
+                },
+            )
         }
 
         RefresherPhase.PHASE_2 -> {
-            if (phase1IsQuiz) {
-                // Cards phase — the LAST card carries the refresher completion
-                // actions (Next refresher / I'll do it later / Done) in place of
-                // the usual forward Next footer.
-                if (!hasCards) { endFlow(); return }
-                RefresherCardSlide(
-                    cards = cards,
-                    cardIndex = cardIndex,
-                    onNext = {
-                        if (cardIndex < cards.size - 1) cardIndex++
-                        else endFlow()
-                    },
-                    modifier = modifier,
-                    autoSpeakEnabled = autoSpeak,
-                    onToggleAutoSpeak = viewModel::toggleAutoSpeak,
-                    onSpeak = { text, onDone -> viewModel.speakAloud(text, onDone) },
-                    onStopSpeak = viewModel::stopSpeaking,
-                    refresherActions = refresherActions,
-                )
-            } else {
-                // Quiz-less ("Learning card") module — no quiz tail, just finish.
-                if (!moduleHasQuiz) { endFlow(); return }
-                // Quiz phase (after cards) — wait until primed.
-                if (!hasQuiz) return
-                key(attemptKey) {
+            if (!runsQuiz) { endFlow(); return }
+            key(attemptKey) {
                 SharedQuizInProgressContent(
                     questions = filteredQuestions,
                     viewModel = viewModel.learnViewModel,
@@ -283,11 +239,9 @@ fun RefresherContent(
                     modifier = modifier,
                     onClose = onDismiss,
                     optionContainerColor = QuizOptionSurface,
-                    // Quiz is the last phase in CARDS_FIRST, so the completion
-                    // actions ("Next refresher" / "I'll do it later" / "Done")
-                    // ride on the last question's feedback instead of a separate
-                    // screen. Modules-screen flow only — the home card has no
-                    // queue (refresherActions == null) and keeps the plain finish.
+                    // The quiz is the last phase, so the completion actions ride on the
+                    // last question's feedback rather than a separate screen. Null on the
+                    // home-card flow, which has no queue and keeps the plain finish.
                     lastQuestionFooter = refresherActions?.let { actions ->
                         {
                             val finishThisQuiz = {
@@ -308,7 +262,6 @@ fun RefresherContent(
                         }
                     },
                 )
-                }
             }
         }
     }

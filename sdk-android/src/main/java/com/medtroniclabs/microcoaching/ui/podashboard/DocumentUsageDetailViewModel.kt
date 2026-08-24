@@ -18,11 +18,15 @@ sealed class DocumentUsageDetailUiState {
 
 /**
  * Backs the document-usage drill-down for one document, keyed by [documentId].
- * Loads over the same default window as the dashboard tab.
+ *
+ * [range] is the window the PO had selected on the tab, passed down through the route
+ * so this screen's figures cover the same period as the row that was tapped. Falls back
+ * to [defaultRange] only when a caller has none.
  */
 class DocumentUsageDetailViewModel(
     private val documentId: String,
     private val source: PODashboardDataSource,
+    private val range: DateRange = defaultRange(),
     val networkAvailable: StateFlow<Boolean> = MicroCoachingSDK.getInstance().networkAvailable,
 ) : ViewModel() {
 
@@ -37,7 +41,7 @@ class DocumentUsageDetailViewModel(
     private fun load() {
         _uiState.value = DocumentUsageDetailUiState.Loading
         viewModelScope.launch {
-            _uiState.value = runCatching { source.loadDocumentUsageDetail(documentId, defaultRange()) }
+            _uiState.value = runCatching { source.loadDocumentUsageDetail(documentId, range) }
                 .fold(
                     onSuccess = { detail ->
                         if (detail != null) DocumentUsageDetailUiState.Ready(detail)
@@ -51,11 +55,12 @@ class DocumentUsageDetailViewModel(
     companion object {
         fun factory(
             documentId: String,
+            range: DateRange = defaultRange(),
             source: PODashboardDataSource = ApiPODashboardDataSource(),
         ): ViewModelProvider.Factory = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T =
-                DocumentUsageDetailViewModel(documentId, source) as T
+                DocumentUsageDetailViewModel(documentId, source, range) as T
         }
     }
 }

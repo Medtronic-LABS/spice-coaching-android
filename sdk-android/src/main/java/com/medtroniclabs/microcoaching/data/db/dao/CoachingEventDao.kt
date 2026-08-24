@@ -188,6 +188,9 @@ interface CoachingEventDao {
      *    ingests quiz attempts and folds them into the `/sync/gaps` baseline, so a
      *    synced quiz event is already represented there; replaying it again would
      *    double-count. Once it syncs it drops out and the delta collapses.
+     *    This arm assumes exactly **one row per question answered** — an
+     *    attempt-level roll-up written alongside them would be folded as an extra
+     *    observation and shift `failedAttemptsCount` by one per quiz.
      *  - **`spice_action_observed`** — **all** of them, synced included. The backend
      *    has **no referral-gap calculation yet**, so these never reach the baseline.
      *    Keeping the local ones (even after they sync) is the only way a wrong

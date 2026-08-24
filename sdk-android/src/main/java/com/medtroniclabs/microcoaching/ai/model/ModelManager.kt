@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
+import android.os.StatFs
 import android.util.Log
 import androidx.work.Constraints
 import androidx.work.ExistingWorkPolicy
@@ -34,11 +35,11 @@ import java.util.concurrent.TimeUnit
  * and respects [MicroCoachingConfig.wifiOnlyModelDownload]. Provider fallback order is
  * driven by [MicroCoachingConfig.modelProviders].
  *
- * A download counts as complete when the file opens as a valid bundle
- * ([ModelFileIntegrity.validateTaskBundle]). This manager compares against no expected
- * size: a configured constant goes stale when the model is republished, so gating adoption
- * on it would reject good downloads. Sizes appear here only in logs and in what the UI
- * displays; the authoritative length check is the server's `Content-Length`, enforced in
+ * A download counts as complete when the file passes its container's structural check
+ * ([ModelFileIntegrity]). The container has no tail structure to inspect, so the expected
+ * length carries that half of the verdict — the `Content-Length` observed for the variant,
+ * or the catalog's figure until one has been seen. During a transfer the authoritative
+ * length check is the server's `Content-Length`, enforced in
  * [com.medtroniclabs.microcoaching.ai.download.ResumableHttpDownloader]. There is no
  * automatic hash check — [verifyIntegrity] offers opt-in SHA-256 and nothing calls it.
  *
@@ -95,44 +96,67 @@ class ModelManager(private val config: MicroCoachingConfig) {
     }
 
     /**
-     * Reconcile the persisted "model ready" flag against on-disk state.
+     * Reconcile the persisted flags against on-disk state, once per process.
      *
-     * Truth table (prefsReady × fileOnDisk):
-     *   - true  × true   → validate, then emit [ModelState.Ready] (happy path post-restart)
-     *   - true  × false  → flag is stale; clear it. State stays [ModelState.Idle].
-     *   - false × true   → file was sideloaded or downloaded before this flag existed.
-     *                      Validate, then emit [ModelState.Ready] and persist the flag.
-     *   - false × false  → genuine fresh-install / wiped state. No change.
-     *
-     * Both file-present branches go through [emitReadyOrCorrupt], so an unusable file is
-     * caught here rather than at load time.
+     * The decision itself is [modelFileVerdict]; this method supplies its inputs and carries
+     * out the result. Splitting them keeps the one part with real branching — an incomplete
+     * file is indistinguishable from a corrupt one, so only the surrounding state can tell
+     * them apart — testable without a `Context` or WorkManager.
      */
     private fun reconcileReadyState() {
         val prefsReady = prefs.getBoolean(KEY_MODEL_READY, false)
         val file = findLocalModel()
-        when {
-            prefsReady && file != null -> {
-                Log.i(TAG, "Reconcile: prefs+file agree — validating ${file.name} (${file.length()} bytes)")
-                emitReadyOrCorrupt(file)
+        val paused = prefs.getBoolean(KEY_DOWNLOAD_PAUSED, false)
+        val verdict = modelFileVerdict(
+            prefsReady = prefsReady,
+            fileExists = file != null,
+            structurallyValid = file != null && validateLocalModel(file) == null,
+            downloadWorkActive = file != null && isDownloadWorkActive(),
+            userPaused = paused,
+        )
+        Log.i(
+            TAG,
+            "Reconcile: verdict=$verdict prefsReady=$prefsReady paused=$paused " +
+                "file=${file?.name ?: "∅"} bytes=${file?.length() ?: 0}",
+        )
+        when (verdict) {
+            ModelFileVerdict.ADOPT_READY -> emitReadyOrCorrupt(file!!)
+            ModelFileVerdict.CLEAR_STALE_FLAG -> clearReadyFlag()
+            ModelFileVerdict.RESUMABLE_PARTIAL -> {
+                // Restores the pause the user left, rather than presenting their partial as a
+                // damaged file. lastKnownProgress is seeded too, so a later pause without a
+                // fresh RUNNING emission still reports the percent they last saw.
+                val progress = prefs.getInt(KEY_DOWNLOAD_PAUSED_PROGRESS, 0)
+                lastKnownProgress = progress
+                _state.value = ModelState.Paused(progress)
             }
-            prefsReady && file == null -> {
-                Log.w(TAG, "Reconcile: prefs says ready but file is missing — clearing flag")
-                prefs.edit().remove(KEY_MODEL_READY).remove(KEY_MODEL_PATH).apply()
-            }
-            !prefsReady && file != null -> {
-                // File present without the ready flag — could be:
-                //   (a) sideloaded by an installer / a complete download from a previous SDK
-                //       version that didn't persist the flag yet, or
-                //   (b) a partial download still in flight from a background worker.
-                //
-                // The structural check separates them without consulting an expected size:
-                // (b) cannot be opened as a bundle, (a) can, at whatever size the model is.
-                // [emitReadyOrCorrupt] protects a live download from deletion mid-write.
-                Log.i(TAG, "Reconcile: file present (${file.length()} bytes) without flag — validating before adoption")
-                emitReadyOrCorrupt(file)
-            }
-            else -> { /* clean slate */ }
+            // The worker is mid-write; it will emit its own state when it finishes.
+            ModelFileVerdict.LEAVE_IN_FLIGHT -> Unit
+            // Re-runs the validation to produce the defect string for the Corrupt state, and
+            // routes deletion through the single gate that owns it.
+            ModelFileVerdict.DELETE_CORRUPT -> emitReadyOrCorrupt(file!!)
+            ModelFileVerdict.NO_OP -> Unit
         }
+    }
+
+    /** Records a pause durably so [reconcileReadyState] can tell it from a failed download. */
+    private fun persistPaused(progressPercent: Int) {
+        prefs.edit()
+            .putBoolean(KEY_DOWNLOAD_PAUSED, true)
+            .putInt(KEY_DOWNLOAD_PAUSED_PROGRESS, progressPercent)
+            .apply()
+    }
+
+    /**
+     * Clears the durable pause. Called wherever a transfer stops being paused — resumed,
+     * cancelled, or completed — so a stale flag can never rescue an unrelated partial file
+     * from deletion later.
+     */
+    private fun clearPaused() {
+        prefs.edit()
+            .remove(KEY_DOWNLOAD_PAUSED)
+            .remove(KEY_DOWNLOAD_PAUSED_PROGRESS)
+            .apply()
     }
 
     /**
@@ -206,8 +230,7 @@ class ModelManager(private val config: MicroCoachingConfig) {
      * only delays readiness whereas a false negative deletes a healthy transfer.
      */
     private fun isDownloadWorkActive(): Boolean {
-        val current = _state.value
-        if (current is ModelState.Downloading || current is ModelState.Paused) return true
+        if (_state.value.isTransferInFlight()) return true
 
         return runCatching {
             WorkManager.getInstance(config.context)
@@ -223,13 +246,20 @@ class ModelManager(private val config: MicroCoachingConfig) {
     /**
      * Structural verdict for [file] — null when usable, else a short reason.
      *
-     * Returns null (i.e. "no objection") for variants whose container we can't cheaply
-     * assert, so an unvalidatable format is never reported as corrupt.
+     * Routed by container, deliberately matching the download worker
+     * ([ModelDownloadWorker.validatorFor]): a file adopted here without a check is a file
+     * the engine is then handed. Returns null ("no objection") for a format whose container
+     * cannot be cheaply asserted, so an unvalidatable one is never reported as corrupt.
      */
     private fun validateLocalModel(file: File): String? {
         val variant = config.selectedModelVariant()
-        if (!ModelCatalog.isTaskBundle(variant)) return null
-        return ModelFileIntegrity.validateTaskBundle(file)
+        if (!ModelCatalog.isLiteRtLmBundle(variant)) return null
+        return ModelFileIntegrity.validateLiteRtLmBundle(
+            file,
+            // The observed Content-Length once this variant has been downloaded; the
+            // catalog figure on a first reconcile.
+            ModelSizeProbe.cachedSize(config.context, variant) ?: variant.sizeInBytes,
+        )
     }
 
     /**
@@ -241,6 +271,10 @@ class ModelManager(private val config: MicroCoachingConfig) {
             .putBoolean(KEY_MODEL_READY, true)
             .putString(KEY_MODEL_PATH, file.absolutePath)
             .remove(KEY_CORRUPT_RETRIES)
+            // A completed file has nothing left to resume, so any pause recorded against it
+            // is spent. Cleared here because every route to Ready passes through this method.
+            .remove(KEY_DOWNLOAD_PAUSED)
+            .remove(KEY_DOWNLOAD_PAUSED_PROGRESS)
             .apply()
     }
 
@@ -305,6 +339,13 @@ class ModelManager(private val config: MicroCoachingConfig) {
      * No-op if:
      *   - A model file already exists on device
      *   - Strategy is [ModelDownloadStrategy.MANUAL] or [ModelDownloadStrategy.PROVIDED]
+     *
+     * Consent is the **caller's** precondition, not this method's: the model is optional, so
+     * callers must confirm [com.medtroniclabs.microcoaching.MicroCoachingSDK.localModelEnabled]
+     * first. Checked here it would need its own
+     * [com.medtroniclabs.microcoaching.ai.model.LocalModelPrefs], and a second instance over
+     * the same file carries a second `StateFlow` that no longer reflects writes through the
+     * first.
      */
     fun scheduleDownloadIfNeeded() {
         if (config.modelDownloadStrategy == ModelDownloadStrategy.PROVIDED ||
@@ -391,11 +432,16 @@ class ModelManager(private val config: MicroCoachingConfig) {
      * [ModelState.Paused] instead of treating this as a failure.
      */
     fun pauseDownload() {
-        if (_state.value !is ModelState.Downloading) {
-            Log.i(TAG, "pauseDownload: state=${_state.value::class.simpleName} — ignored")
+        val current = _state.value
+        if (current !is ModelState.Downloading && current !is ModelState.WaitingForNetwork) {
+            Log.i(TAG, "pauseDownload: state=${current::class.simpleName} — ignored")
             return
         }
         userPauseRequested = true
+        // Persisted before cancelling: cancellation is what makes the pause
+        // indistinguishable from a failure on the next process start, so the record has to
+        // outlive this process to be worth anything.
+        persistPaused(lastKnownProgress)
         WorkManager.getInstance(config.context).cancelUniqueWork(UNIQUE_WORK_NAME)
         // Optimistic UI update — the CANCELLED observer fires asynchronously
         // and would otherwise leave the spinner spinning for a beat.
@@ -417,6 +463,30 @@ class ModelManager(private val config: MicroCoachingConfig) {
     }
 
     /**
+     * Free space needed before a download is worth starting: whatever the variant still owes,
+     * plus headroom so the system is not driven to zero.
+     *
+     * Returns null when there is enough, else a reason. An unreadable volume returns null —
+     * the same fail-open stance [com.medtroniclabs.microcoaching.data.asset.AssetCache] takes,
+     * since a failed probe is not evidence of a full disk.
+     */
+    private fun insufficientSpaceReason(): String? {
+        val dir = config.context.getExternalFilesDir(null) ?: return null
+        val expected = config.selectedModelVariant().sizeInBytes
+        if (expected <= 0L) return null
+        val alreadyOnDisk = findLocalModel()?.length() ?: 0L
+        val needed = (expected - alreadyOnDisk).coerceAtLeast(0L) + SPACE_HEADROOM_BYTES
+        val available = runCatching { StatFs(dir.path).availableBytes }.getOrElse { cause ->
+            Log.w(TAG, "Could not read free space (${cause.message}) — proceeding")
+            return null
+        }
+        if (available >= needed) return null
+        Log.e(TAG, "Refusing download: need $needed bytes, $available available")
+        return "Not enough free space: ${needed / 1_048_576} MB required, " +
+            "${available / 1_048_576} MB available"
+    }
+
+    /**
      * Cancel a download outright — stops the worker, deletes the partial file,
      * clears the persisted ready flag, and resets state to [ModelState.Idle].
      * Use when the user actively gives up on the download (as opposed to
@@ -424,11 +494,12 @@ class ModelManager(private val config: MicroCoachingConfig) {
      */
     fun cancelDownload() {
         val current = _state.value
-        if (current !is ModelState.Downloading && current !is ModelState.Paused) {
+        if (!current.isTransferInFlight()) {
             Log.i(TAG, "cancelDownload: state=${current::class.simpleName} — ignored")
             return
         }
         userPauseRequested = false  // ensure observer doesn't misread as pause
+        clearPaused()
         WorkManager.getInstance(config.context).cancelUniqueWork(UNIQUE_WORK_NAME)
         findLocalModel()?.let { f ->
             if (f.delete()) Log.w(TAG, "cancelDownload: deleted partial file ${f.name}")
@@ -440,6 +511,17 @@ class ModelManager(private val config: MicroCoachingConfig) {
     }
 
     private fun scheduleDownload() {
+        // Checked before enqueue so the failure is one sentence the user can act on, rather
+        // than a native ENOSPC surfacing minutes into a transfer that was never going to fit.
+        insufficientSpaceReason()?.let { reason ->
+            _state.value = ModelState.DownloadFailed(reason)
+            return
+        }
+
+        // The pause is over the moment new work is enqueued, and the flag has to go with it —
+        // left set, it would later rescue an unrelated partial from deletion.
+        clearPaused()
+
         val networkType = if (config.wifiOnlyModelDownload) {
             NetworkType.UNMETERED
         } else {
@@ -513,12 +595,15 @@ class ModelManager(private val config: MicroCoachingConfig) {
 
                     when (info.state) {
                         WorkInfo.State.ENQUEUED, WorkInfo.State.BLOCKED -> {
-                            // Show "preparing" so the user knows something is happening
-                            // even before the worker actually starts (e.g. waiting for
-                            // Wi-Fi). Don't overwrite a more specific state we already
-                            // hold for this run.
+                            // Enqueued means the constraints are not yet satisfied, so no
+                            // bytes are moving. Saying so lets the UI name the thing the user
+                            // can act on instead of showing a progress bar that cannot move.
+                            // A more specific state already held for this run wins.
                             if (current !is ModelState.Downloading && current !is ModelState.Paused) {
-                                _state.value = ModelState.Downloading(progressPercent = -1)
+                                _state.value = ModelState.WaitingForNetwork(
+                                    progressPercent = lastKnownProgress.takeIf { it > 0 } ?: -1,
+                                    wifiOnly = config.wifiOnlyModelDownload,
+                                )
                             }
                         }
                         WorkInfo.State.RUNNING -> {
@@ -591,7 +676,7 @@ class ModelManager(private val config: MicroCoachingConfig) {
         // worker on a partial file — not a real failure. Ignoring it avoids locking in
         // LoadFailed (which observeUniqueWork then respects) and deleting in-flight bytes.
         val currentState = _state.value
-        if (currentState is ModelState.Downloading || currentState is ModelState.Paused) {
+        if (currentState.isTransferInFlight()) {
             Log.w(
                 TAG,
                 "onModelLoadFailed: download in flight ($currentState) — ignoring '$reason'",
@@ -621,6 +706,37 @@ class ModelManager(private val config: MicroCoachingConfig) {
             "Load failed but ${file.name} is structurally valid (${file.length()} bytes) — keeping for retry: $reason",
         )
         _state.value = ModelState.LoadFailed(reason)
+    }
+
+    /**
+     * Removes the model at the user's request and returns to [ModelState.Idle].
+     *
+     * Distinct from [deleteModelAndReset], which lands on [ModelState.LoadFailed]: that is the
+     * right report for a file that failed us, and the wrong one for a file the user chose to
+     * remove. Presented as a failure, a deliberate opt-out reads as something to fix, and the
+     * UI offers a retry for it.
+     *
+     * The ready flag and the pause record go with the file, so a later opt-in starts clean
+     * rather than inheriting state describing bytes that are gone. The corrupt-retry budget is
+     * deliberately left alone — it tracks a server sending bad bytes, which this says nothing
+     * about.
+     *
+     * Callers must have unloaded the inference engine first; deleting a file the engine holds
+     * mapped is a native crash.
+     */
+    fun deleteModelForUserOptOut() {
+        val file = findLocalModel()
+        if (file == null) {
+            Log.i(TAG, "deleteModelForUserOptOut: no file on disk — resetting state only")
+        } else if (file.delete()) {
+            Log.i(TAG, "deleteModelForUserOptOut: deleted ${file.name} (${file.length()} bytes)")
+        } else {
+            Log.w(TAG, "deleteModelForUserOptOut: could not delete ${file.name}")
+        }
+        clearReadyFlag()
+        clearPaused()
+        lastKnownProgress = 0
+        _state.value = ModelState.Idle
     }
 
     /**
@@ -678,6 +794,20 @@ class ModelManager(private val config: MicroCoachingConfig) {
         private const val PREFS_NAME = com.medtroniclabs.microcoaching.util.PrefsNames.MODEL
         private const val KEY_MODEL_READY = "model_ready"
         private const val KEY_MODEL_PATH = "model_path"
+
+        /**
+         * Durable record of a user-initiated pause. Pausing cancels the WorkManager job, so
+         * without this the partial file is indistinguishable from a failed download on the
+         * next process start.
+         */
+        private const val KEY_DOWNLOAD_PAUSED = "download_paused"
+        private const val KEY_DOWNLOAD_PAUSED_PROGRESS = "download_paused_progress"
+
+        /**
+         * Free space kept in reserve beyond the model's own size, so a download that just
+         * fits doesn't leave the device with nothing for Room, logs, or the OS.
+         */
+        private const val SPACE_HEADROOM_BYTES = 64L * 1024L * 1024L
 
         /** Re-download attempts allowed after a confirmed-corrupt file, per good copy. */
         private const val MAX_CORRUPT_RETRIES = 2

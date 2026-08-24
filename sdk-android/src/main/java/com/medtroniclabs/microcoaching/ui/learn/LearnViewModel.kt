@@ -433,8 +433,9 @@ class LearnViewModel(
      *
      * Only quiz-less modules go through here — one with questions must still be
      * answered, and completing it on cards alone would let a CHW skip the
-     * assessment. Records the same `module_completed` event the quiz path emits so
-     * the server converges on the same state the device just wrote.
+     * assessment. Completion is recorded locally in `chw_module_completion` and
+     * nowhere else — no event carries it, because no backend consumer reads one.
+     * The reader's `module_card_viewed` rows are what the server sees.
      */
     fun onLessonCardsFinished() {
         val module = activeModule ?: return
@@ -442,14 +443,6 @@ class LearnViewModel(
         viewModelScope.launch {
             val sdk = MicroCoachingSDK.getInstance()
             sdk.onModuleCardsCompleted(module.moduleFamilyId, module.moduleId)
-            telemetry.recordCoachingEvent(
-                eventType = "module_completed",
-                clinicalDomain = module.clinicalDomain,
-                cardType = "info",
-                moduleFamilyId = module.moduleFamilyId,
-                moduleId = module.moduleId,
-                moduleVersion = module.moduleVersion,
-            )
             // Finishing a module is a milestone worth reporting now rather than at
             // the next periodic tick
             sdk.flushTelemetryNow()
@@ -470,16 +463,12 @@ class LearnViewModel(
             (_uiState.value as? LearnUiState.LessonContent)
                 ?.takeIf { it.module.moduleFamilyId == module.moduleFamilyId }
                 ?.let { _uiState.value = LearnUiState.LessonContent(full) }
-            // Recording the first card view as the CHW enters the lesson body.
-            telemetry.recordCoachingEvent(
-                eventType = "module_card_viewed",
-                clinicalDomain = full.clinicalDomain,
-                cardType = "info",
-                moduleFamilyId = full.moduleFamilyId,
-                moduleId = full.moduleId,
-                moduleVersion = full.moduleVersion,
-                cardFamilyId = full.cardFamilyId,
-            )
+            // No card-view event here: this is the module detail screen, not the
+            // lesson body. [LessonPlayerScreen] reports the card the CHW is
+            // actually on via [recordCardShown], starting at index 0 — and
+            // `module.cardFamilyId` is that same first card, so emitting here
+            // too would count it twice. `module_delivered` from [selectModule]
+            // is the "opened the module" signal.
         }
     }
 

@@ -24,16 +24,20 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.medtroniclabs.microcoaching.R
 import com.medtroniclabs.microcoaching.ui.common.CenterProgress
 import com.medtroniclabs.microcoaching.ui.common.SdkScreenHeader
+import com.medtroniclabs.microcoaching.ui.podashboard.DateRange
 import com.medtroniclabs.microcoaching.ui.podashboard.PODashboardUiState
 import com.medtroniclabs.microcoaching.ui.podashboard.PODashboardViewModel
 import com.medtroniclabs.microcoaching.ui.podashboard.components.ModuleCompletionRow
 import com.medtroniclabs.microcoaching.ui.theme.SpiceBlue
 import com.medtroniclabs.microcoaching.ui.theme.SurfaceMuted
 
-/** "Modules Completed" — per-module accordion with per-SK check rows. */
+/**
+ * "Modules Completed" — per-module accordion with per-SK check rows, over the [range] the
+ * KPI card was counted for (see [ActiveSksScreen] for why it is passed in).
+ */
 @Composable
-fun ModulesCompletedScreen(chwId: String, onBack: () -> Unit, onHome: () -> Unit) {
-    val vm: PODashboardViewModel = viewModel(factory = PODashboardViewModel.factory(chwId))
+fun ModulesCompletedScreen(chwId: String, range: DateRange, onBack: () -> Unit, onHome: () -> Unit) {
+    val vm: PODashboardViewModel = viewModel(factory = PODashboardViewModel.factory(chwId, range))
     val state by vm.uiState.collectAsState()
     val networkAvailable by vm.networkAvailable.collectAsState()
     val expanded = remember { mutableStateMapOf<Int, Boolean>() }

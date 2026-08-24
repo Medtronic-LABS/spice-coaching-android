@@ -136,9 +136,17 @@ internal object ModelSizeProbe {
         }
     }
 
+    /**
+     * The token goes only to a repo that needs it: on an ungated one a stale or revoked
+     * token answers 401 where an anonymous request would have returned the size, leaving a
+     * perfectly downloadable model showing the catalog's approximation. Same rule the
+     * download applies (`ModelDownloadWorker.tryHuggingFace`).
+     */
     private fun requestBuilder(variant: ModelVariant, hfToken: String): Request.Builder =
         Request.Builder().url(variant.downloadUrl).apply {
-            if (hfToken.isNotBlank()) header("Authorization", "Bearer $hfToken")
+            if (hfToken.isNotBlank() && variant.requiresAccessToken) {
+                header("Authorization", "Bearer $hfToken")
+            }
         }
 
     private fun prefs(context: Context) =

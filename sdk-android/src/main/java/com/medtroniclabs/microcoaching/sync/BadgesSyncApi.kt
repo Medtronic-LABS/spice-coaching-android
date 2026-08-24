@@ -25,7 +25,6 @@ suspend fun SyncApi.pullBadges(): BadgesResult {
     }
     return safeInbound(
         label = "Badges",
-        failureStage = "inbound_badges",
         call = { apiService.pullBadges() },
         onSuccess = { body ->
             val rows = mergeBadgePayloads(

@@ -55,7 +55,6 @@ internal fun mergeSourceDocumentRows(
  */
 suspend fun SyncApi.pullMorningCards(): MorningCardsResult = safeInbound(
     label = "Morning cards",
-    failureStage = null,
     call = { apiService.getMorningCards() },
     onSuccess = { body ->
         val now = System.currentTimeMillis()
@@ -104,7 +103,6 @@ suspend fun SyncApi.pullVideoProgress(sinceWatermark: String?): VideoProgressRes
     }
     return safeInbound(
         label = "Video progress",
-        failureStage = "inbound_video_progress",
         call = {
             apiService.pullVideoProgress(
                 since = sinceWatermark?.takeIf { it.isNotBlank() } ?: SyncDefaults.EPOCH_ISO,
@@ -156,7 +154,6 @@ suspend fun SyncApi.pullSourceDocuments(): SourceDocumentsResult {
         val response = apiService.getSourceDocuments(since = SyncDefaults.EPOCH_ISO)
         if (!response.isSuccessful) {
             val errorMsg = "HTTP ${response.code()}"
-            recordInboundFailure("inbound_source_documents", errorMsg)
             Log.w(TAG, "Source-documents sync server error: $errorMsg")
             return SourceDocumentsResult.failed(errorMsg, httpKindFor(response.code()))
         }
@@ -243,11 +240,9 @@ suspend fun SyncApi.pullSourceDocuments(): SourceDocumentsResult {
             assignedVideos = videoResult,
         )
     } catch (e: IOException) {
-        recordInboundFailure("inbound_source_documents", e.javaClass.simpleName, offline = true)
         Log.w(TAG, "Source-documents sync network error: ${e.message}")
         SourceDocumentsResult.failed(e.message ?: "network error", SyncErrorKind.NETWORK)
     } catch (e: Exception) {
-        recordInboundFailure("inbound_source_documents", e.javaClass.simpleName)
         Log.w(TAG, "Source-documents sync unexpected error: ${e.message}", e)
         SourceDocumentsResult.failed(e.message ?: "unexpected error", SyncErrorKind.UNEXPECTED)
     }
