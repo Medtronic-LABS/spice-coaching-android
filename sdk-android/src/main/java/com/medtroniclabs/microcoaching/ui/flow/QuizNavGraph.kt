@@ -48,6 +48,7 @@ import com.medtroniclabs.microcoaching.ui.learn.finishQuiz
 import com.medtroniclabs.microcoaching.ui.learn.hasQuestion
 import com.medtroniclabs.microcoaching.ui.learn.retryCourse
 import com.medtroniclabs.microcoaching.ui.learn.selectAnswer
+import com.medtroniclabs.microcoaching.ui.learn.advanceToNextSegment
 import com.medtroniclabs.microcoaching.ui.learn.LearnUiState
 import com.medtroniclabs.microcoaching.ui.coaching.CoachingHomeHost
 import com.medtroniclabs.microcoaching.ui.podashboard.drilldown.ActiveSksScreen
@@ -149,17 +150,26 @@ internal fun NavGraphBuilder.quizGraph(
             return@composable
         }
         val uiState by learnVm.uiState.collectAsState()
+        val quizResult = uiState as? LearnUiState.QuizResult
         QuizResultScreen(
             uiState = uiState,
             isRefresherQuiz = learnVm.startedViaRefresher,
             onNextModule = {
-                // Lightweight restore — popToModuleList() reuses the cached
-                // module list, then we pop to the existing ModuleReady entry
-                // instead of pushing a fresh one (avoids stacking duplicates
-                // and the Loading flash a fresh re-init would cause).
                 navController.whenSettled {
-                    learnVm.popToModuleList()
-                    navController.popToHome()
+                    // In Card→Quiz sequence mode (LEAP-11): a passed quiz advances to
+                    // the next card unless this was the last segment. A failed quiz
+                    // (or "Done" pressed without retrying) exits to the module list.
+                    if (learnVm.isInSequenceMode && quizResult?.passed == true && !learnVm.isLastSegment) {
+                        learnVm.advanceToNextSegment()
+                        navController.navigate(CoachingRoute.LessonContent.route) {
+                            popUpTo(CoachingRoute.QuizResult.route) { inclusive = true }
+                        }
+                        navController.navigate(CoachingRoute.LessonPlayer.route)
+                    } else {
+                        // Legacy flat mode, last segment, or failed quiz — back to list.
+                        learnVm.popToModuleList()
+                        navController.popToHome()
+                    }
                 }
             },
             onBackToSpice = onFinish,
@@ -168,9 +178,8 @@ internal fun NavGraphBuilder.quizGraph(
             // valid retry path regardless of entry — refresher path
             // included — and let `canRetry` control whether the button
             // is actually surfaced. retryCourse() resets quiz counters
-            // and pushes LessonContent → LessonPlayer; for refresher
-            // entries the CHW gets to re-read the lesson cards before
-            // retaking the quiz, which is a reasonable UX.
+            // and pushes LessonContent → LessonPlayer; in sequence mode
+            // the same card (not all cards) is replayed before the retry.
             canRetry = learnVm.canRetryActiveQuiz(),
             onTryAgain = {
                 // Gate the whole handler (not the individual navigate calls):

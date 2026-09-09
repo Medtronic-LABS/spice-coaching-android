@@ -52,15 +52,39 @@ internal fun LearnViewModel.canTakeQuiz(module: LearnModule): Boolean {
 }
 
 /**
- * Restarts the lesson-player course after a failed quiz ("Try Again").
- * Resets quiz counters and restores [LearnUiState.LessonContent] so
- * [LessonPlayerScreen] has a module to render (QuizResult would show blank).
+ * Restarts the lesson-player after a failed quiz ("Try Again").
+ *
+ * In Card→Quiz sequence mode (LEAP-11): keeps [activeSegmentIndex] unchanged so
+ * the CHW replays the same card before retrying its quiz with reshuffled options.
+ * In legacy flat mode: identical to the old behaviour — all cards are shown again.
  */
 internal fun LearnViewModel.retryCourse() {
     val module = activeModule ?: return
     _quizCorrectCount = 0
     _quizTotalCount = 0
     startedViaCourse = true
+    // Segment index is intentionally NOT reset: the CHW must re-read the same card
+    // before the reshuffled retry quiz (LEAP-11). Legacy mode is unaffected because
+    // isInSequenceMode is false, and getCurrentSegmentCards() returns all cards.
+    _uiState.value = LearnUiState.LessonContent(module)
+}
+
+/**
+ * Advances to the next Card→Quiz segment (LEAP-11).
+ *
+ * Called from the nav graph when "Done" is tapped on a passed [LearnUiState.QuizResult]
+ * in sequence mode. Increments [activeSegmentIndex] and flips back to
+ * [LearnUiState.LessonContent] so the player shows the next card. The nav graph
+ * then navigates to [LessonPlayerScreen] with [LearnViewModel.getCurrentSegmentCards].
+ *
+ * Must only be called when [isInSequenceMode] is true and the quiz was passed.
+ */
+internal fun LearnViewModel.advanceToNextSegment() {
+    activeSegmentIndex++
+    _quizCorrectCount = 0
+    _quizTotalCount = 0
+    startedViaCourse = true
+    val module = activeModule ?: return
     _uiState.value = LearnUiState.LessonContent(module)
 }
 
@@ -74,10 +98,17 @@ internal fun LearnViewModel.startQuiz() {
         // (rare) direct-to-quiz path with a slim module.
         val full = hydrate(module)
         activeModule = full
+        // In Card→Quiz sequence mode (LEAP-11), only present questions for the
+        // current segment; in legacy flat mode, present all questions.
+        val pool = if (isInSequenceMode) {
+            activeSegments.getOrNull(activeSegmentIndex)?.questions ?: full.inlineQuestions.orEmpty()
+        } else {
+            full.inlineQuestions.orEmpty()
+        }
         // Fresh question + option order for every attempt (incl. course "Try Again",
         // which re-routes back through here). Materialised once into activeQuestions,
         // so the order is stable for the whole attempt and read-by-index downstream.
-        activeQuestions = (full.inlineQuestions ?: emptyList()).shuffledForAttempt()
+        activeQuestions = pool.shuffledForAttempt()
         _uiState.value = LearnUiState.QuizInProgress(questions = activeQuestions)
         telemetry.recordCoachingEvent(
             eventType = "module_quiz_viewed",
@@ -254,6 +285,7 @@ internal fun LearnViewModel.finishQuiz(deferSync: Boolean = false) {
         questions = state.questions,
         answers = state.answers,
         earnedXp = earnedXp,
+        passed = passed,
     )
 
     viewModelScope.launch {

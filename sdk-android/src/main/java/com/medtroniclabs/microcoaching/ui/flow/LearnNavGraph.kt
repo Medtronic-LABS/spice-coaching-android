@@ -44,6 +44,7 @@ import com.medtroniclabs.microcoaching.ui.learn.LearnModule
 import com.medtroniclabs.microcoaching.ui.learn.LearnViewModel
 import com.medtroniclabs.microcoaching.ui.learn.startQuiz
 import com.medtroniclabs.microcoaching.ui.learn.canTakeQuiz
+import com.medtroniclabs.microcoaching.ui.learn.advanceToNextSegment
 import com.medtroniclabs.microcoaching.ui.learn.LearnUiState
 import com.medtroniclabs.microcoaching.ui.coaching.CoachingHomeHost
 import com.medtroniclabs.microcoaching.ui.podashboard.DateRange
@@ -394,9 +395,16 @@ internal fun NavGraphBuilder.learnGraph(
         val module = liveModule ?: cachedModule
         val autoSpeak by learnVm.autoSpeakEnabled.collectAsState()
         if (module != null) {
-            // The module overload reads SDK language internally.
+            // In Card→Quiz sequence mode (LEAP-11) supply only the current segment's
+            // single card; in legacy flat mode supply all cards. Both paths use the
+            // explicit cards overload so language is resolved consistently.
+            val lang = if (com.medtroniclabs.microcoaching.MicroCoachingSDK.getInstance()
+                    .config.language == com.medtroniclabs.microcoaching.Language.ENGLISH
+            ) "en" else "bn"
+            val lessonCards = learnVm.getCurrentSegmentCards()
             LessonPlayerScreen(
-                module = module,
+                cards = lessonCards,
+                lang = lang,
                 // Close the last-card quiz path once the reattempt window has
                 // closed (MED-1940 Req 1) — the CTA becomes "More modules"
                 // instead of "Start Quiz". Reading the course stays allowed;
@@ -415,16 +423,29 @@ internal fun NavGraphBuilder.learnGraph(
                         navController.popToOrHome(CoachingRoute.LessonContent.route)
                     }
                 },
-                // Quiz-less modules (0 questions) end at the cards-completion
-                // screen instead of routing into an empty quiz. Modules WITH a
-                // quiz keep the direct onStartQuiz path below — no bridge screen.
-                hasQuiz = module.questionCount > 0,
+                // In sequence mode, check whether the current segment has questions.
+                // In legacy mode, fall back to the module-level question count.
+                hasQuiz = if (learnVm.isInSequenceMode) {
+                    learnVm.activeSegments.getOrNull(learnVm.activeSegmentIndex)
+                        ?.questions.orEmpty().isNotEmpty()
+                } else {
+                    module.questionCount > 0
+                },
                 onFinishCards = {
-                    // Reaching the end of the cards is what completes a quiz-less
-                    // module — it has no other way to get there.
-                    learnVm.onLessonCardsFinished()
-                    navController.whenSettled {
-                        navController.navigate(CoachingRoute.LessonComplete.route)
+                    if (learnVm.isInSequenceMode && !learnVm.isLastSegment) {
+                        // Segment has no quiz — skip straight to the next card
+                        learnVm.advanceToNextSegment()
+                        navController.whenSettled {
+                            navController.navigate(CoachingRoute.LessonPlayer.route) {
+                                popUpTo(CoachingRoute.LessonPlayer.route) { inclusive = true }
+                            }
+                        }
+                    } else {
+                        // Legacy: reaching the end of the cards completes a quiz-less module
+                        learnVm.onLessonCardsFinished()
+                        navController.whenSettled {
+                            navController.navigate(CoachingRoute.LessonComplete.route)
+                        }
                     }
                 },
                 onStartQuiz = {
@@ -444,7 +465,15 @@ internal fun NavGraphBuilder.learnGraph(
                         navController.popToHome()
                     }
                 },
-                onCardShown = { idx: Int -> learnVm.recordCardShown(idx) },
+                onCardShown = { idx: Int ->
+                    // In sequence mode the player receives a single-card list, so idx is
+                    // always 0. Translate it to the real card position so telemetry records
+                    // the correct card family id (LEAP-11).
+                    val realIdx = if (learnVm.isInSequenceMode) {
+                        learnVm.activeSegments.getOrNull(learnVm.activeSegmentIndex)?.cardIndex ?: idx
+                    } else idx
+                    learnVm.recordCardShown(realIdx)
+                },
                 autoSpeakEnabled = autoSpeak,
                 onToggleAutoSpeak = learnVm::toggleAutoSpeak,
                 onSpeak = { text, onDone -> learnVm.speakAloud(text, onDone) },

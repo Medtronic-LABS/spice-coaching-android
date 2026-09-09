@@ -45,6 +45,8 @@ internal fun parseInlineQuiz(quizJson: String, lang: String = "bn"): List<QuizQu
                 ?.firstOrNull()?.jsonPrimitive?.content?.toIntOrNull() ?: 0
             val explanation = obj.readLocalized("explanation").forLang(lang).orEmpty()
             val caseSetup = obj.readLocalized("case_setup").forLang(lang).orEmpty()
+            // 1-based card index from the sync contract — null for legacy questions
+            val primaryCardIndex = obj["primary_card_index"]?.jsonPrimitive?.content?.toIntOrNull()
 
             QuizQuestion(
                 id = id,
@@ -53,6 +55,7 @@ internal fun parseInlineQuiz(quizJson: String, lang: String = "bn"): List<QuizQu
                 correctIndex = correct,
                 explanation = explanation,
                 caseSetup = caseSetup,
+                primaryCardIndex = primaryCardIndex,
             )
         }.onFailure { e ->
             Log.w(TAG, "Failed to parse quiz row #$idx: ${e.message}")

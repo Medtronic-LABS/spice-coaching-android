@@ -86,6 +86,24 @@ class LearnViewModel(
     /** The module the CHW is currently working through. */
     internal var activeModule: LearnModule? = null
 
+    // ── Card→Quiz sequence state (LEAP-11) ───────────────────────────────────
+
+    /**
+     * Segments built by [buildCardQuizSegments] when the module's questions carry
+     * [QuizQuestion.primaryCardIndex]. Empty when the module uses the legacy flat
+     * flow (all cards then all questions — no interleaving).
+     */
+    internal var activeSegments: List<CardQuizSegment> = emptyList()
+
+    /** 0-based index of the segment the CHW is currently working through. */
+    internal var activeSegmentIndex: Int = 0
+
+    /** True when the module is running in Card→Quiz interleave mode. */
+    val isInSequenceMode: Boolean get() = activeSegments.isNotEmpty()
+
+    /** True when [activeSegmentIndex] is at the final segment. */
+    val isLastSegment: Boolean get() = activeSegmentIndex >= activeSegments.lastIndex
+
     /**
      * Last-known mapped module list from [observeModules]. Used by [popToModuleList] to
      * restore the [LearnUiState.ModuleList] state without re-running [initialise] and
@@ -339,6 +357,8 @@ class LearnViewModel(
     fun popToModuleList() {
         activeModule = null
         activeQuestions = emptyList()
+        activeSegments = emptyList()
+        activeSegmentIndex = 0
         startedViaCourse = false
         startedViaRefresher = false
         val cached = lastKnownModules
@@ -404,6 +424,18 @@ class LearnViewModel(
         parseLessonCards(activeModule?.cardsJson ?: "[]")
 
     /**
+     * Returns the single card for the current segment in Card→Quiz sequence mode,
+     * or all cards in legacy flat mode. [LessonPlayerScreen] passes this list so
+     * the CHW reads exactly one card before its quiz (LEAP-11).
+     */
+    fun getCurrentSegmentCards(): List<LessonCard> {
+        val all = getCurrentCards()
+        if (!isInSequenceMode) return all
+        val idx = activeSegments.getOrNull(activeSegmentIndex)?.cardIndex ?: return all
+        return listOfNotNull(all.getOrNull(idx))
+    }
+
+    /**
      * Emits a `module_card_viewed` telemetry event when the CHW views a card
      * in [LessonPlayerScreen]. Called via `LaunchedEffect(currentIndex)`.
      *
@@ -451,6 +483,7 @@ class LearnViewModel(
 
     fun startLesson() {
         val module = activeModule ?: return
+        activeSegmentIndex = 0
         // Emit immediately so the detail header (title/thumbnail/CTAs, all present
         // on the slim model) renders without delay; the card list fills in once
         // the blobs are hydrated a moment later.
@@ -458,6 +491,12 @@ class LearnViewModel(
         viewModelScope.launch {
             val full = hydrate(module)
             activeModule = full
+            // Build Card→Quiz segments from the hydrated data. An empty result means
+            // no question carries primary_card_index → fall back to legacy flat flow.
+            activeSegments = buildCardQuizSegments(
+                cards = parseLessonCards(full.cardsJson),
+                questions = full.inlineQuestions.orEmpty(),
+            )
             // Upgrade the state to the hydrated module only if the CHW is still on
             // this module's lesson content (they may have navigated away).
             (_uiState.value as? LearnUiState.LessonContent)

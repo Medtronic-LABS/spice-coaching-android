@@ -64,5 +64,9 @@ sealed class LearnUiState {
          * (attempted × base + correct × multiplier + completion). Display-only.
          */
         val earnedXp: Int = 0,
+        // True when scorePercent >= the configured pass threshold. Used by the nav
+        // graph to decide whether "Done" advances to the next card segment (pass)
+        // or exits to the module list (fail) in Card→Quiz sequence mode (LEAP-11).
+        val passed: Boolean = false,
     ) : LearnUiState()
 }

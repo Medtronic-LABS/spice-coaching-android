@@ -260,4 +260,8 @@ data class QuizQuestion(
     val caseSetup: String = "",
     val pointValue: Int = 10,
     val optionOriginalIndices: List<Int> = emptyList(),
+    // 1-based index of the learning card this question tests, from `primary_card_index`
+    // in the sync payload. Used by CardQuizSequencer to interleave Card→Quiz pairs
+    // (LEAP-11). Null for legacy questions without card pairing — grouped as trailing quiz.
+    val primaryCardIndex: Int? = null,
 )
