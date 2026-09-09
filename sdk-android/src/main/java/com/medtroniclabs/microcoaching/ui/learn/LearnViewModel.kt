@@ -124,6 +124,11 @@ class LearnViewModel(
     internal var _quizCorrectCount = 0
     internal var _quizTotalCount = 0
 
+    // LEAP-11: accumulated totals across all segments for the final result screen.
+    // Reset at lesson start; incremented in finishQuiz() for each passed segment.
+    internal var _allSegmentsCorrect = 0
+    internal var _allSegmentsTotal = 0
+
     // ── Listen-aloud (TTS) ────────────────────────────────────────────────────
 
     /** Speaks lesson card bodies; [speakAloud] picks the voice per utterance. */
@@ -295,6 +300,24 @@ class LearnViewModel(
     }
 
     /**
+     * Like [hydrate] but always re-parses quiz JSON with the current [langCode],
+     * bypassing any cached [LearnModule.inlineQuestions]. Used by [startQuiz] so
+     * language switches between lesson entry and quiz start are reflected correctly.
+     */
+    internal suspend fun hydrateWithFreshQuiz(module: LearnModule): LearnModule {
+        val entity = module.moduleId?.let { moduleRepo.getById(it) }
+            ?: moduleRepo.getByFamilyId(module.moduleFamilyId)
+            ?: return hydrate(module) // fallback: entity pruned, use whatever we have
+        val questions = parseInlineQuiz(entity.quizJson, langCode())
+        // Preserve cardsJson from prior hydration (or re-read if still slim)
+        val cardsJson = if (module.cardsJson != "[]") module.cardsJson else entity.cardsJson
+        return module.copy(
+            cardsJson = cardsJson,
+            inlineQuestions = questions.takeIf { it.isNotEmpty() },
+        )
+    }
+
+    /**
      * The module that follows [current] in the same list it belongs to — training
      * first, then refresher — or null when it's the last one. Returned in SLIM
      * (list) form; the caller re-runs the normal [selectModule] + [startLesson]
@@ -359,6 +382,8 @@ class LearnViewModel(
         activeQuestions = emptyList()
         activeSegments = emptyList()
         activeSegmentIndex = 0
+        _allSegmentsCorrect = 0
+        _allSegmentsTotal = 0
         startedViaCourse = false
         startedViaRefresher = false
         val cached = lastKnownModules
@@ -484,12 +509,15 @@ class LearnViewModel(
     fun startLesson() {
         val module = activeModule ?: return
         activeSegmentIndex = 0
+        _allSegmentsCorrect = 0
+        _allSegmentsTotal = 0
         // Emit immediately so the detail header (title/thumbnail/CTAs, all present
         // on the slim model) renders without delay; the card list fills in once
         // the blobs are hydrated a moment later.
         _uiState.value = LearnUiState.LessonContent(module)
         viewModelScope.launch {
-            val full = hydrate(module)
+            // Use hydrateWithFreshQuiz so segments carry questions in the current lang.
+            val full = hydrateWithFreshQuiz(module)
             activeModule = full
             // Build Card→Quiz segments from the hydrated data. An empty result means
             // no question carries primary_card_index → fall back to legacy flat flow.

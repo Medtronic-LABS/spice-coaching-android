@@ -94,10 +94,10 @@ internal fun LearnViewModel.startQuiz() {
     _quizCorrectCount = 0
     _quizTotalCount = 0
     viewModelScope.launch {
-        // Hydrate the quiz blob before showing the quiz. Usually a no-op — the
-        // module was already hydrated on lesson entry — but covers the
-        // (rare) direct-to-quiz path with a slim module.
-        val full = hydrate(module)
+        // Always re-parse quiz JSON with the current language so switching app
+        // language mid-session produces questions in the correct locale.
+        // hydrate() caches cardsJson but we bypass the inlineQuestions cache here.
+        val full = hydrateWithFreshQuiz(module)
         activeModule = full
         // In Card→Quiz sequence mode (LEAP-11), only present questions for the
         // current segment; in legacy flat mode, present all questions.
@@ -260,23 +260,6 @@ internal fun LearnViewModel.finishQuiz(deferSync: Boolean = false) {
     else (correctCount * 100) / state.questions.size
     val passed = scorePercent >= passThreshold
 
-    val badge = when {
-        scorePercent >= 80 -> localized(R.string.badge_expert)
-        scorePercent >= passThreshold -> localized(R.string.badge_learner)
-        else -> localized(R.string.badge_practice)
-    }
-
-    MicroCoachingSDK.getInstance().coachingModuleStore
-        .setInSessionStatus(module.moduleFamilyId, if (passed) "completed" else "in_progress")
-
-    // XP from the shared learning-points config: every attempted question
-    // earns the base, each correct answer the multiplier, plus a flat
-    // completion reward (reaching this screen ⇒ all questions attempted).
-    val earnedXp = sdk.learningPoints.value.moduleQuizXp(
-        questionsAttempted = state.questions.size,
-        correctAnswers = correctCount,
-    )
-
     android.util.Log.d(LearnViewModel.TAG, "LEAP-11 finishQuiz: score=$scorePercent% passed=$passed threshold=${sdk.config.quizPassThreshold} segIdx=$activeSegmentIndex isLast=$isLastSegment isSeqMode=$isInSequenceMode")
 
     // In Card→Quiz sequence mode, skip the intermediate result screen:
@@ -288,23 +271,47 @@ internal fun LearnViewModel.finishQuiz(deferSync: Boolean = false) {
         if (!passed) {
             retryCourse()
             return
-        } else if (!isLastSegment) {
+        }
+        // Accumulate this segment's score toward the final result.
+        _allSegmentsCorrect += correctCount
+        _allSegmentsTotal += state.questions.size
+        if (!isLastSegment) {
             advanceToNextSegment()
             return
         }
-        // Pass + last segment: fall through to emit QuizResult (final screen)
+        // Pass + last segment: fall through to emit QuizResult with aggregate totals
     }
 
+    // In sequence mode use accumulated totals; in legacy mode use this quiz's totals.
+    val finalCorrect = if (isInSequenceMode) _allSegmentsCorrect else correctCount
+    val finalTotal = if (isInSequenceMode) _allSegmentsTotal else state.questions.size
+    val finalScore = if (finalTotal == 0) 0 else (finalCorrect * 100) / finalTotal
+    val finalPassed = finalScore >= passThreshold
+
+    val badge = when {
+        finalScore >= 80 -> localized(R.string.badge_expert)
+        finalScore >= passThreshold -> localized(R.string.badge_learner)
+        else -> localized(R.string.badge_practice)
+    }
+
+    MicroCoachingSDK.getInstance().coachingModuleStore
+        .setInSessionStatus(module.moduleFamilyId, if (finalPassed) "completed" else "in_progress")
+
+    val earnedXp = sdk.learningPoints.value.moduleQuizXp(
+        questionsAttempted = finalTotal,
+        correctAnswers = finalCorrect,
+    )
+
     _uiState.value = LearnUiState.QuizResult(
-        scorePercent = scorePercent,
-        correctCount = correctCount,
-        totalCount = state.questions.size,
+        scorePercent = finalScore,
+        correctCount = finalCorrect,
+        totalCount = finalTotal,
         badgeLabel = badge,
         completedModuleFamilyId = module.moduleFamilyId,
         questions = state.questions,
         answers = state.answers,
         earnedXp = earnedXp,
-        passed = passed,
+        passed = finalPassed,
     )
 
     viewModelScope.launch {
@@ -319,8 +326,8 @@ internal fun LearnViewModel.finishQuiz(deferSync: Boolean = false) {
         sdk.onModuleQuizCompleted(
             moduleFamilyId = module.moduleFamilyId,
             moduleId = module.moduleId,
-            scoreFraction = scorePercent / 100f,
-            passed = passed,
+            scoreFraction = finalScore / 100f,
+            passed = finalPassed,
         )
 
         // Quiz attempt is a meaningful milestone — flush the batch
