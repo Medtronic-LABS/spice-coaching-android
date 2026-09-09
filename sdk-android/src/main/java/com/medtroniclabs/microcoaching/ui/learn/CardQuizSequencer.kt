@@ -28,15 +28,29 @@ internal data class CardQuizSegment(
 /**
  * @param cards Ordered lesson cards for the module.
  * @param questions All quiz questions for the module.
+ * @param debugForceSequence When true (debug builds only), auto-assigns each question
+ *   to the card at the same position when [QuizQuestion.primaryCardIndex] is absent.
+ *   Allows end-to-end testing of the Card→Quiz flow without backend support for the
+ *   `primary_card_index` field. Must never be true in release builds.
  * @return Per-card segments in card order, or empty when no question carries
  *   [QuizQuestion.primaryCardIndex] (triggers legacy flat fallback in the caller).
  */
 internal fun buildCardQuizSegments(
     cards: List<LessonCard>,
     questions: List<QuizQuestion>,
+    debugForceSequence: Boolean = false,
 ): List<CardQuizSegment> {
-    // No card-index metadata → caller falls back to legacy flat flow
-    if (questions.none { it.primaryCardIndex != null }) return emptyList()
+    // No card-index metadata → auto-assign in debug force mode, else legacy flat flow
+    if (questions.none { it.primaryCardIndex != null }) {
+        if (!debugForceSequence || cards.isEmpty() || questions.isEmpty()) {
+            android.util.Log.d("CardQuizSequencer", "LEAP-11: legacy flat mode (cards=${cards.size} questions=${questions.size} forceSeq=$debugForceSequence)")
+            return emptyList()
+        }
+        // Debug: assign question i → card (i % cardCount) + 1 so every question links to a card
+        val forced = questions.mapIndexed { i, q -> q.copy(primaryCardIndex = (i % cards.size) + 1) }
+        android.util.Log.d("CardQuizSequencer", "LEAP-11: debug forced ${forced.size} questions across ${cards.size} cards")
+        return buildCardQuizSegments(cards, forced, debugForceSequence = false)
+    }
 
     // Group questions by their 1-based card index
     val byCardOneBased: Map<Int, List<QuizQuestion>> =
@@ -52,6 +66,7 @@ internal fun buildCardQuizSegments(
             questions = byCardOneBased[idx + 1].orEmpty(), // convert 0-based → 1-based
         )
     }
+    android.util.Log.d("CardQuizSequencer", "LEAP-11: built ${segments.size} segments, questions/card: ${segments.map { it.questions.size }}")
 
     // Append trailing segment only when there are unanchored questions
     return if (unanchored.isEmpty()) segments

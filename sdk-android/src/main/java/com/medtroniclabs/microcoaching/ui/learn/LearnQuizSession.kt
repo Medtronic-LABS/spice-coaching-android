@@ -84,6 +84,7 @@ internal fun LearnViewModel.advanceToNextSegment() {
     _quizCorrectCount = 0
     _quizTotalCount = 0
     startedViaCourse = true
+    android.util.Log.d(LearnViewModel.TAG, "LEAP-11 advanceToNextSegment: now at segment $activeSegmentIndex/${activeSegments.size}, isLast=$isLastSegment")
     val module = activeModule ?: return
     _uiState.value = LearnUiState.LessonContent(module)
 }
@@ -276,6 +277,7 @@ internal fun LearnViewModel.finishQuiz(deferSync: Boolean = false) {
         correctAnswers = correctCount,
     )
 
+    android.util.Log.d(LearnViewModel.TAG, "LEAP-11 finishQuiz: score=$scorePercent% passed=$passed threshold=${sdk.config.quizPassThreshold} segIdx=$activeSegmentIndex isLast=$isLastSegment isSeqMode=$isInSequenceMode")
     _uiState.value = LearnUiState.QuizResult(
         scorePercent = scorePercent,
         correctCount = correctCount,

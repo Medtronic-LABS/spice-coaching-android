@@ -156,17 +156,31 @@ internal fun NavGraphBuilder.quizGraph(
             isRefresherQuiz = learnVm.startedViaRefresher,
             onNextModule = {
                 navController.whenSettled {
-                    // In Card→Quiz sequence mode (LEAP-11): a passed quiz advances to
-                    // the next card unless this was the last segment. A failed quiz
-                    // (or "Done" pressed without retrying) exits to the module list.
-                    if (learnVm.isInSequenceMode && quizResult?.passed == true && !learnVm.isLastSegment) {
-                        learnVm.advanceToNextSegment()
+                    // In Card→Quiz sequence mode (LEAP-11):
+                    //   Pass + not last segment → advance to next card
+                    //   Pass + last segment     → module complete, back to list
+                    //   Fail                    → replay same card (JIRA: "If Fail: Show
+                    //                             learning card N again"), NOT back to list
+                    if (learnVm.isInSequenceMode) {
+                        if (quizResult?.passed == true) {
+                            if (!learnVm.isLastSegment) {
+                                learnVm.advanceToNextSegment()
+                            } else {
+                                learnVm.popToModuleList()
+                                navController.popToHome()
+                                return@whenSettled
+                            }
+                        }
+                        // Passed (advanced) or failed — in both cases re-enter the card player.
+                        // On pass: advanceToNextSegment() already incremented the index → next card.
+                        // On fail: same index unchanged → same card replayed before retry.
+                        learnVm.retryCourse()
                         navController.navigate(CoachingRoute.LessonContent.route) {
                             popUpTo(CoachingRoute.QuizResult.route) { inclusive = true }
                         }
                         navController.navigate(CoachingRoute.LessonPlayer.route)
                     } else {
-                        // Legacy flat mode, last segment, or failed quiz — back to list.
+                        // Legacy flat mode — back to list.
                         learnVm.popToModuleList()
                         navController.popToHome()
                     }

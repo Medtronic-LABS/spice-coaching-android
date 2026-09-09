@@ -496,7 +496,9 @@ class LearnViewModel(
             activeSegments = buildCardQuizSegments(
                 cards = parseLessonCards(full.cardsJson),
                 questions = full.inlineQuestions.orEmpty(),
+                debugForceSequence = com.medtroniclabs.microcoaching.BuildConfig.DEBUG,
             )
+            Log.d(TAG, "LEAP-11 startLesson: segments=${activeSegments.size} isInSequenceMode=$isInSequenceMode")
             // Upgrade the state to the hydrated module only if the CHW is still on
             // this module's lesson content (they may have navigated away).
             (_uiState.value as? LearnUiState.LessonContent)
