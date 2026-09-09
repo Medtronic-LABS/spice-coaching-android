@@ -474,6 +474,11 @@ internal fun NavGraphBuilder.learnGraph(
                     } else idx
                     learnVm.recordCardShown(realIdx)
                 },
+                isSequenceLastStep = !learnVm.isInSequenceMode || learnVm.isLastSegment,
+                sequenceCardDisplayIndex = if (learnVm.isInSequenceMode)
+                    learnVm.activeSegmentIndex + 1 else null,
+                sequenceTotalCardCount = if (learnVm.isInSequenceMode)
+                    learnVm.activeSegments.size else null,
                 autoSpeakEnabled = autoSpeak,
                 onToggleAutoSpeak = learnVm::toggleAutoSpeak,
                 onSpeak = { text, onDone -> learnVm.speakAloud(text, onDone) },

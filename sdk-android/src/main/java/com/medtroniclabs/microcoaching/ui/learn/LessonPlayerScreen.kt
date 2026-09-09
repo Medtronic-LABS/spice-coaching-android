@@ -96,6 +96,14 @@ fun LessonPlayerScreen(
     onFinishReading: () -> Unit = onStartQuiz,
     hasQuiz: Boolean = true,
     onFinishCards: () -> Unit = onFinishReading,
+    // LEAP-11: false when in sequence mode and this is not the final segment,
+    // so the last card shows "Next →" instead of "Start Quiz →".
+    isSequenceLastStep: Boolean = true,
+    // LEAP-11: override the "Learning X of N" header counter for sequence mode,
+    // where the player receives a 1-card slice but the CHW should see their real
+    // position across all cards. Defaults to null = use cards list size/index.
+    sequenceCardDisplayIndex: Int? = null,
+    sequenceTotalCardCount: Int? = null,
 ) {
     if (cards.isEmpty()) {
         // No content — exit straight away. Read-only revisit lands on the modules
@@ -152,7 +160,11 @@ fun LessonPlayerScreen(
         Column(modifier = Modifier.fillMaxSize()) {
             // ── Consistent blue header ──────────────────────────────────────────
             SdkScreenHeader(
-                title = stringResource(R.string.lesson_player_progress, currentIndex + 1, cards.size),
+                title = stringResource(
+                    R.string.lesson_player_progress,
+                    sequenceCardDisplayIndex ?: (currentIndex + 1),
+                    sequenceTotalCardCount ?: cards.size,
+                ),
                 onBack = {
                     onStopSpeak()
                     onBack()
@@ -275,6 +287,7 @@ fun LessonPlayerScreen(
                             when {
                                 readOnly -> R.string.lesson_player_back_to_modules
                                 !hasQuiz -> R.string.lesson_player_finish
+                                !isSequenceLastStep -> R.string.lesson_player_next
                                 else -> R.string.lesson_player_start_quiz
                             },
                         )

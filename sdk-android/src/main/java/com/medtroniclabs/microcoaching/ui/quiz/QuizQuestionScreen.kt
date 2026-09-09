@@ -63,6 +63,9 @@ fun QuizQuestionScreen(
     onBack: () -> Unit = {},
     moduleTitle: String = "",
     onHome: () -> Unit = {},
+    // LEAP-11: false when in sequence mode and this is not the final segment,
+    // so the last question of a mid-sequence quiz shows "Next" not "Finish".
+    isSequenceLastStep: Boolean = true,
 ) {
     // Keep the last-known quiz state visible while an exit transition animates.
     // Every quiz exit flips the shared LearnViewModel state BEFORE the pop
@@ -225,7 +228,7 @@ fun QuizQuestionScreen(
                     showFeedback = false
                     onNext()
                 },
-                isLastQuestion = questionIndex + 1 >= totalQuestions,
+                isLastQuestion = (questionIndex + 1 >= totalQuestions) && isSequenceLastStep,
             )
 
             Spacer(Modifier.height(24.dp))

@@ -105,6 +105,7 @@ internal fun NavGraphBuilder.quizGraph(
             uiState = uiState,
             questionIndex = index,
             onAnswerSelected = { answerIndex -> learnVm.selectAnswer(index, answerIndex) },
+            isSequenceLastStep = !learnVm.isInSequenceMode || learnVm.isLastSegment,
             onNext = {
                 // whenSettled: a double-tap on Next otherwise stacks a
                 // duplicate question entry — or runs finishQuiz() twice on
