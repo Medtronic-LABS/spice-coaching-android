@@ -278,6 +278,23 @@ internal fun LearnViewModel.finishQuiz(deferSync: Boolean = false) {
     )
 
     android.util.Log.d(LearnViewModel.TAG, "LEAP-11 finishQuiz: score=$scorePercent% passed=$passed threshold=${sdk.config.quizPassThreshold} segIdx=$activeSegmentIndex isLast=$isLastSegment isSeqMode=$isInSequenceMode")
+
+    // In Card→Quiz sequence mode, skip the intermediate result screen:
+    //   Fail            → replay same card directly (no result screen shown)
+    //   Pass + not last → advance to next card directly (no result screen shown)
+    //   Pass + last     → fall through to show the final result screen below
+    // Legacy flat mode always shows the result screen.
+    if (isInSequenceMode) {
+        if (!passed) {
+            retryCourse()
+            return
+        } else if (!isLastSegment) {
+            advanceToNextSegment()
+            return
+        }
+        // Pass + last segment: fall through to emit QuizResult (final screen)
+    }
+
     _uiState.value = LearnUiState.QuizResult(
         scorePercent = scorePercent,
         correctCount = correctCount,
