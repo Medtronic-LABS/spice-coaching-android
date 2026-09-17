@@ -132,6 +132,7 @@ class VideoPlayerActivity : ComponentActivity() {
                     onToggleDownload = ::onToggleDownload,
                     onProgress = { pos, dur -> reporter?.onCheckpoint(pos, dur) },
                     onFlush = { pos, dur -> reporter?.onFlush(pos, dur) },
+                    onPause = { pos, dur -> reporter?.onPause(pos, dur) },
                     onEnded = { dur -> reporter?.onCompleted(dur) },
                 )
             }
@@ -309,6 +310,7 @@ private fun VideoPlayerScreen(
     onToggleDownload: () -> Unit,
     onProgress: (Long, Long) -> Unit,
     onFlush: (Long, Long) -> Unit,
+    onPause: (Long, Long) -> Unit,
     onEnded: (Long) -> Unit,
 ) {
     // Removing the download deletes the very file this player is streaming from, and
@@ -354,6 +356,7 @@ private fun VideoPlayerScreen(
                     startPositionMs = startPositionMs,
                     onProgress = onProgress,
                     onFlush = onFlush,
+                    onPause = onPause,
                     onEnded = onEnded,
                 )
                 VideoPlayerActivity.PlaybackState.Error -> Text(

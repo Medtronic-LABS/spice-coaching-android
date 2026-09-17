@@ -45,6 +45,7 @@ import com.medtroniclabs.microcoaching.ui.SdkLocaleHelper
 import com.medtroniclabs.microcoaching.ui.SdkLocalizedTheme
 import com.medtroniclabs.microcoaching.ui.common.SdkScreenHeader
 import com.medtroniclabs.microcoaching.ui.video.ExoPlayerSurface
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -122,6 +123,13 @@ class DocumentPreviewActivity : ComponentActivity() {
      */
     private var viewRecorded = false
 
+    // Tier-B (LEAP-43): captured at resolve, emitted at close so document_viewed
+    // carries time_spent_ms (open→close) and downloaded (cache-miss fetch).
+    private var viewOpenedAtMs = 0L
+    private var pendingViewDocId: String? = null
+    private var pendingChwId: String? = null
+    @Volatile private var wasDownloaded = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         viewRecorded = savedInstanceState?.getBoolean(STATE_VIEW_RECORDED) == true
@@ -187,16 +195,44 @@ class DocumentPreviewActivity : ComponentActivity() {
             Log.w(TAG, "Skipping document_viewed — no CHW id yet")
             return
         }
+        // Capture now; the actual event is emitted at close (onDestroy) so it can
+        // carry time_spent_ms and downloaded. See [flushDocumentView].
         viewRecorded = true
-        lifecycleScope.launch(Dispatchers.IO) {
+        pendingViewDocId = sourceDocumentId
+        pendingChwId = chwId
+        viewOpenedAtMs = System.currentTimeMillis()
+    }
+
+    /**
+     * Emits the captured document-view at close with Tier-B fields (LEAP-43):
+     * time_spent_ms (open→close) and downloaded. Uses a standalone IO scope
+     * because [lifecycleScope] is already cancelled by the time onDestroy runs.
+     */
+    private fun flushDocumentView() {
+        val docId = pendingViewDocId ?: return
+        val chwId = pendingChwId ?: return
+        pendingViewDocId = null
+        val elapsed = (System.currentTimeMillis() - viewOpenedAtMs).coerceAtLeast(0L)
+        val downloaded = wasDownloaded
+        val sdk = runCatching { MicroCoachingSDK.getInstance() }.getOrNull() ?: return
+        CoroutineScope(Dispatchers.IO).launch {
             runCatching {
                 EventRecorder(
                     dao = sdk.database.coachingEventDao(),
                     sessionId = sdk.coachingSessionId,
                     chwId = chwId,
-                ).recordDocumentViewed(sourceDocumentId)
+                ).recordDocumentViewed(
+                    docId,
+                    timeSpentMs = elapsed,
+                    downloaded = downloaded,
+                )
             }.onFailure { Log.w(TAG, "Failed to record document_viewed: ${it.message}") }
         }
+    }
+
+    override fun onDestroy() {
+        flushDocumentView()
+        super.onDestroy()
     }
 
     private fun resolveAndRoute(
@@ -232,6 +268,10 @@ class DocumentPreviewActivity : ComponentActivity() {
                 return@launch
             }
 
+            // Cache-presence BEFORE resolve → whether this open triggers a
+            // network download (Tier-B "Downloaded?"). Best-effort.
+            wasDownloaded = runCatching { !sdk.assetCache.isCached(sourceDocumentId) }
+                .getOrDefault(false)
             val file = try {
                 // Durable, offline-capable: cache hit returns the local file (no
                 // network); online miss fetches a presigned URL, downloads & stores

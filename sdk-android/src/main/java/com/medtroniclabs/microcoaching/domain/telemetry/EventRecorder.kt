@@ -416,12 +416,26 @@ class EventRecorder(
         lastPositionMs: Long,
         percentWatched: Double,
         completed: Boolean,
+        // Tier-B session behaviour (LEAP-43). Null until known/measured — a
+        // missing key must not read as a real zero in the report.
+        startedAt: String? = null,
+        endedAt: String? = null,
+        watchDurationMs: Long? = null,
+        pauseCount: Int? = null,
+        rewatchCount: Int? = null,
+        dropOffMs: Long? = null,
     ) {
         val payload = buildJsonObject {
             put("source_document_id", sourceDocumentId)
             put("last_position_ms", lastPositionMs)
             put("percent_watched", percentWatched)
             put("completed", completed)
+            startedAt?.let { put("started_at", it) }
+            endedAt?.let { put("ended_at", it) }
+            watchDurationMs?.let { put("watch_duration_ms", it) }
+            pauseCount?.let { put("pause_count", it) }
+            rewatchCount?.let { put("rewatch_count", it) }
+            dropOffMs?.let { put("drop_off_ms", it) }
         }.toString()
         val networkState = if (MicroCoachingSDK.getInstance().isNetworkAvailable()) "online" else "offline"
         dao.insert(
@@ -455,9 +469,17 @@ class EventRecorder(
      * [sourceDocumentId] must be a UUID — the analytics query drops rows whose
      * payload id doesn't parse.
      */
-    suspend fun recordDocumentViewed(sourceDocumentId: String) {
+    suspend fun recordDocumentViewed(
+        sourceDocumentId: String,
+        // Tier-B (LEAP-43): the wall-clock the document was open, and whether
+        // it was downloaded to the device this open. Null when not measured.
+        timeSpentMs: Long? = null,
+        downloaded: Boolean? = null,
+    ) {
         val payload = buildJsonObject {
             put("source_document_id", sourceDocumentId)
+            timeSpentMs?.let { put("time_spent_ms", it) }
+            downloaded?.let { put("downloaded", it) }
         }.toString()
         val networkState = if (MicroCoachingSDK.getInstance().isNetworkAvailable()) "online" else "offline"
         dao.insert(

@@ -41,6 +41,7 @@ internal fun ExoPlayerSurface(
     startPositionMs: Long = 0L,
     onProgress: ((positionMs: Long, durationMs: Long) -> Unit)? = null,
     onFlush: ((positionMs: Long, durationMs: Long) -> Unit)? = null,
+    onPause: ((positionMs: Long, durationMs: Long) -> Unit)? = null,
     onEnded: ((durationMs: Long) -> Unit)? = null,
 ) {
     val context = LocalContext.current
@@ -67,7 +68,9 @@ internal fun ExoPlayerSurface(
                 // A user pause — but not the implicit stop at end-of-media, which
                 // is handled by onEnded.
                 if (!isPlaying && player.playbackState != Player.STATE_ENDED) {
-                    onFlush?.invoke(player.currentPosition, player.duration.coerceAtLeast(0L))
+                    // A genuine pause — counted separately from the screen-exit
+                    // flush below (onDispose), so pause_count is accurate.
+                    onPause?.invoke(player.currentPosition, player.duration.coerceAtLeast(0L))
                 }
             }
         }

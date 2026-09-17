@@ -39,10 +39,24 @@ internal class VideoProgressReporter(
     private var lastEmitMs = 0L
     private var completedEmitted = false
 
+    // Tier-B session behaviour (LEAP-43). Cumulative across the session; the
+    // report reads them off the last event per session_id.
+    private var startedAtIso: String? = null
+    private var pauseCount = 0
+    private var rewatchCount = 0
+    private var maxPositionMs = 0L
+    private var lastPositionMs = 0L
+
     /** Periodic checkpoint while playing — telemetry emitted only past the throttle. */
     fun onCheckpoint(positionMs: Long, durationMs: Long) = handle(positionMs, durationMs, force = false)
 
-    /** Pause / screen-exit — a forced telemetry emit regardless of the throttle. */
+    /** Pause — counts toward pause_count, then a forced telemetry emit. */
+    fun onPause(positionMs: Long, durationMs: Long) {
+        pauseCount++
+        handle(positionMs, durationMs, force = true)
+    }
+
+    /** Screen-exit — a forced telemetry emit regardless of the throttle. */
     fun onFlush(positionMs: Long, durationMs: Long) = handle(positionMs, durationMs, force = true)
 
     /** Playback reached the end — final 100% / completed emit, flushed promptly. */
@@ -53,8 +67,18 @@ internal class VideoProgressReporter(
         scope.launch(Dispatchers.IO) {
             runCatching { dao.updateProgress(videoId, chwId, dur, 100.0, completed = true, watchedAt = nowIso()) }
                 .onFailure { Log.w(TAG, "completed DB update failed: ${it.message}") }
-            runCatching { recorder.recordVideoProgress(videoId, dur, 100.0, completed = true) }
-                .onFailure { Log.w(TAG, "completed telemetry failed: ${it.message}") }
+            runCatching {
+                recorder.recordVideoProgress(
+                    videoId, dur, 100.0, completed = true,
+                    startedAt = startedAtIso,
+                    endedAt = nowIso(),
+                    watchDurationMs = if (dur > 0L) dur else maxPositionMs,
+                    pauseCount = pauseCount,
+                    rewatchCount = rewatchCount,
+                    // Watched to the end — no drop-off point.
+                    dropOffMs = null,
+                )
+            }.onFailure { Log.w(TAG, "completed telemetry failed: ${it.message}") }
             runCatching { MicroCoachingSDK.getInstance().flushTelemetryNow() }
         }
     }
@@ -64,6 +88,14 @@ internal class VideoProgressReporter(
         val pos = positionMs.coerceAtLeast(0L)
         val dur = durationMs.coerceAtLeast(0L)
         val percent = if (dur > 0L) (pos.toDouble() / dur * 100.0).coerceIn(0.0, 100.0) else 0.0
+
+        // Session-behaviour tracking. A jump backward past the threshold is a
+        // rewatch/scrub-back; maxPositionMs is the furthest watched (drop-off +
+        // watch-duration proxy).
+        startedAtIso = startedAtIso ?: nowIso()
+        if (pos < lastPositionMs - REWATCH_THRESHOLD_MS) rewatchCount++
+        lastPositionMs = pos
+        if (pos > maxPositionMs) maxPositionMs = pos
 
         // Always keep local resume state fresh (monotonic in the DAO). completed
         // stays false here — authoritative completion comes from onCompleted().
@@ -83,8 +115,17 @@ internal class VideoProgressReporter(
         lastEmittedPercent = percent
         lastEmitMs = now
         scope.launch(Dispatchers.IO) {
-            runCatching { recorder.recordVideoProgress(videoId, pos, percent, completed = false) }
-                .onFailure { Log.w(TAG, "progress telemetry failed: ${it.message}") }
+            runCatching {
+                recorder.recordVideoProgress(
+                    videoId, pos, percent, completed = false,
+                    startedAt = startedAtIso,
+                    endedAt = nowIso(),
+                    watchDurationMs = maxPositionMs,
+                    pauseCount = pauseCount,
+                    rewatchCount = rewatchCount,
+                    dropOffMs = pos,
+                )
+            }.onFailure { Log.w(TAG, "progress telemetry failed: ${it.message}") }
         }
     }
 
@@ -101,6 +142,9 @@ internal class VideoProgressReporter(
 
         /** …or whenever watched-percent advances by at least this much since the last emit. */
         const val MIN_PERCENT_DELTA = 5.0
+
+        /** A position jump backward by at least this much counts as a rewatch. */
+        const val REWATCH_THRESHOLD_MS = 3_000L
 
         /**
          * The throttle decision, extracted pure so it's
