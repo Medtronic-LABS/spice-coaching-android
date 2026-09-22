@@ -110,6 +110,24 @@ data class MicroCoachingConfig internal constructor(
      */
     val wifiOnlyModelDownload: Boolean = false,
 
+    // ── Dense retrieval ───────────────────────────────────────────────────────
+    /**
+     * Enables hybrid (BM25 + embedding) chat retrieval: syncs per-card embedding vectors
+     * from `/sync/card-embeddings`, and fetches the on-device query encoder as the second
+     * half of the "simple words" download.
+     *
+     * On by default, and a kill switch rather than an opt-in — what actually decides whether
+     * a device fetches the ~176 MB encoder is the user enabling the local model plus the
+     * 3 GB RAM tier ([com.medtroniclabs.microcoaching.ai.embedding.EncoderModelRule]). A
+     * device that never turns on "simple words" never downloads it.
+     *
+     * Turning it off keeps the pipeline byte-identical to BM25-only: no vector sync, no
+     * encoder, and every dense evidence channel structurally unreachable because nothing
+     * sets a cosine. Degradation is likewise structural — missing vectors, a missing encoder
+     * or a low-end device each leave chat on exactly that same behaviour.
+     */
+    val enableDenseRetrieval: Boolean = true,
+
     // ── Model Download Providers ──────────────────────────────────────────────
     /**
      * Ordered list of providers tried when downloading the model.
@@ -217,7 +235,10 @@ data class MicroCoachingConfig internal constructor(
     val forceLowEndMode: Boolean? = null,
 
     // ── Feature Flags ─────────────────────────────────────────────────────────
-    /** Enable the AI chat fragment (UC-2 entry point). */
+    /**
+     * **Reserved — no effect.** Stored here but read nowhere in the SDK; chat is always
+     * available. Kept for wire compatibility with existing host builder chains.
+     */
     val enableChat: Boolean = true,
     /**
      * When `true`, merge per-card `retrieval_hints_*` from APK assets
@@ -228,11 +249,14 @@ data class MicroCoachingConfig internal constructor(
     val enableRetrievalHintFixtureOverlay: Boolean = false,
     /** Enable Bengali voice input/output (Phase 6 — disabled by default). */
     val enableVoice: Boolean = false,
-    /** Enable micro-learning module UC-1 (Phase 3 — disabled by default). */
+    /**
+     * **Reserved — no effect.** Read nowhere in the SDK. Note the `false` default while
+     * micro-learning works regardless: that mismatch is the giveaway that this is not a gate.
+     */
     val enableLearnModule: Boolean = false,
-    /** Enable counselling apply module UC-2 (Phase 4 — disabled by default). */
+    /** **Reserved — no effect.** Read nowhere in the SDK. See [enableLearnModule]. */
     val enableApplyModule: Boolean = false,
-    /** Enable telemetry measure module UC-3 (Phase 5 — disabled by default). */
+    /** **Reserved — no effect.** Read nowhere in the SDK. See [enableLearnModule]. */
     val enableMeasureModule: Boolean = false,
     /**
      * Run synced gap-detection rules inside `onReferralSubmitted` (see
@@ -427,17 +451,33 @@ data class ChatTuning(
  * @property enScoreFloor Minimum score for a hit to be served on an English turn.
  * @property promoteRatio A hit may be served ahead of BM25 rank-1 only while it
  *           retains at least this fraction of rank-1's score.
- * @property bigramRescueScore Rescue band for mangled input (OCR, mistyped Bangla).
- *           Such a query matches no term, yet when it is a garbled rendition of a
- *           card's own words the character-bigram channel drives BM25 far above
- *           anything a topic mismatch reaches, so rank-1 is served without term
- *           evidence at or above this score.
+ * @property cosFloor Dense-retrieval evidence floor: a hit whose synced card
+ *           embedding reaches this cosine similarity against the query embedding
+ *           counts as servable evidence even with zero word overlap (the
+ *           population veto still wins). Only meaningful when dense retrieval is
+ *           enabled; hits without a vector carry no cosine and are unaffected.
+ * @property rrfK Reciprocal-rank-fusion constant for merging the BM25 and dense
+ *           rankings — larger values flatten the rank contribution of each list.
+ * @property denseTopK How many dense candidates enter the fusion.
+ * @property cosDominantFloor Cosine at which semantic agreement stops being a
+ *           tie-breaker and outranks authored title/hint overlap. Set well above
+ *           [cosFloor]: agreement qualifies a hit to be served, dominance decides
+ *           which hit wins, and hint density is right far more often than it is
+ *           wrong. Calibrated over the labelled audit set as the widest setting
+ *           that never promotes an unacceptable card or breaks a refusal.
+ * @property cosDominantMargin How far the leading cosine must sit above the
+ *           runner-up's before it counts as dominant. Two candidates a hundredth
+ *           apart are not a semantic verdict, just noise.
  */
 data class ServeTuning(
     val bnScoreFloor: Float = 25f,
     val enScoreFloor: Float = 40f,
     val promoteRatio: Float = 0.55f,
-    val bigramRescueScore: Float = 250f,
+    val cosFloor: Float = 0.50f,
+    val rrfK: Int = 60,
+    val denseTopK: Int = 3,
+    val cosDominantFloor: Float = 0.65f,
+    val cosDominantMargin: Float = 0.03f,
 )
 
 /**

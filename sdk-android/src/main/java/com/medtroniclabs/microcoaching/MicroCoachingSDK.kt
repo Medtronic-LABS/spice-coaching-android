@@ -461,6 +461,7 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
         config = config,
         moduleDao = { database.moduleDao() },
         retiredFamilyIds = { syncPrefs.retiredFamilyIds },
+        cardEmbeddingDao = { database.cardEmbeddingDao() },
     )
 
     /**
@@ -476,6 +477,17 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
      * vocabulary of every card retrieval can return.
      */
     internal val chatScopeClassifier: StateFlow<ScopeClassifier> = chatIndexBootstrap.scopeClassifier
+
+    /** Dense vector index for hybrid retrieval; null whenever dense retrieval cannot run. */
+    internal val chatDenseIndex: kotlinx.coroutines.flow.StateFlow<com.medtroniclabs.microcoaching.ai.retrieval.DenseVectorIndex?> =
+        chatIndexBootstrap.denseIndex
+
+    /** Query encoder for hybrid retrieval; null whenever dense retrieval cannot run. */
+    internal val queryEmbedder: com.medtroniclabs.microcoaching.ai.inference.QueryEmbedder? by lazy {
+        com.medtroniclabs.microcoaching.ai.inference.QueryEmbedders.resolve(
+            config.context, config.enableDenseRetrieval,
+        )
+    }
 
     /**
      * Start (once) the background collector that builds and maintains [chatKnowledgeIndex].
@@ -507,6 +519,7 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
 
     private val modelManagerLazy = lazy { ModelManager(config) }
     private val sttModelManagerLazy = lazy { SttModelManager(config) }
+
 
     /** Lazy-initialized model lifecycle manager (download, verify, state). */
     val modelManager: ModelManager by modelManagerLazy
@@ -1190,6 +1203,7 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
         private var modelPath: String = ""
         private var modelDownloadStrategy: ModelDownloadStrategy = ModelDownloadStrategy.ON_FIRST_USE
         private var wifiOnlyModelDownload: Boolean = false
+        private var enableDenseRetrieval: Boolean = true
         private var modelProviders: List<ModelProvider> = ModelProvider.DEFAULT_ORDER
         private var huggingFaceToken: String = ""
         private var huggingFaceModelUrl: String = ""
@@ -1241,6 +1255,16 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
         fun modelPath(path: String) = apply { modelPath = path }
         fun modelDownloadStrategy(strategy: ModelDownloadStrategy) = apply { modelDownloadStrategy = strategy }
         fun wifiOnlyModelDownload(wifiOnly: Boolean) = apply { wifiOnlyModelDownload = wifiOnly }
+
+        /**
+         * Turn hybrid (BM25 + embedding) chat retrieval off — vector sync, the on-device
+         * query encoder, and dense fusion all go with it.
+         *
+         * On by default. The encoder is fetched as the second half of the "simple words"
+         * download, so a host that leaves this alone still costs nothing on a device whose
+         * user never enables the local model.
+         */
+        fun enableDenseRetrieval(enabled: Boolean) = apply { enableDenseRetrieval = enabled }
         /**
          * Override provider priority or disable a provider entirely. Default order is
          * Backend → HuggingFace → Kaggle, but only HuggingFace can currently serve a
@@ -1407,6 +1431,7 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
                 modelPath = modelPath,
                 modelDownloadStrategy = modelDownloadStrategy,
                 wifiOnlyModelDownload = wifiOnlyModelDownload,
+                enableDenseRetrieval = enableDenseRetrieval,
                 modelProviders = modelProviders,
                 huggingFaceToken = huggingFaceToken,
                 huggingFaceModelUrl = huggingFaceModelUrl,
