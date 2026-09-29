@@ -195,7 +195,7 @@
     <!-- ── W4 course-detail + lesson player ───────────────────────────────── -->
     <string name="module_detail_curriculum">পাঠ্যক্রম</string>
     <string name="module_detail_assigned_on">অ্যাসাইন করা হয়েছে %1$s</string>
-    <string name="module_detail_learning_cards">শেখার কার্ড</string>
+    <string name="module_detail_learning_cards">শিক্ষা কার্ড</string>
     <string name="module_detail_quiz_section">কুইজ</string>
     <string name="module_detail_knowledge_check">জ্ঞান পরীক্ষা</string>
     <string name="module_detail_listen">শুনুন</string>
@@ -207,7 +207,7 @@
     <string name="module_detail_questions_stat">প্রশ্ন</string>
     <string name="module_detail_duration_stat">মিনিট</string>
     <string name="module_detail_min">%1$d মিনিট</string>
-    <string name="lesson_player_progress">শেখা %1$d / %2$d</string>
+    <string name="lesson_player_progress">বিষয়বস্তু %1$d / %2$d</string>
     <string name="lesson_player_next">পরবর্তী</string>
     <string name="lesson_player_previous">আগের</string>
     <string name="refresher_card_done">সম্পন্ন</string>
@@ -310,7 +310,7 @@
     <!-- ── Section headings ───────────────────────────────────────────────── -->
     <string name="modules_section_refreshers">রিফ্রেশার</string>
     <string name="modules_section_training">প্রশিক্ষণ</string>
-    <string name="modules_section_knowledge">জ্ঞান</string>
+    <string name="modules_section_knowledge">লাইব্রেরি</string>
     <string name="modules_see_all">সব দেখুন</string>
     <string name="refresher_empty_no_skipped">কোনো এড়িয়ে যাওয়া রিফ্রেশার নেই</string>
     <string name="refresher_empty_none">এখনও কোনো রিফ্রেশার নেই।</string>
@@ -362,7 +362,7 @@
     <string name="badge_read">পড়ুন</string>
 
     <!-- ── Modules screen header ─────────────────────────────────────────────── -->
-    <string name="modules_screen_title">ব্যক্তিগত কোচিং</string>
+    <string name="modules_screen_title">প্রশিক্ষণ</string>
     <!-- Header subtitle on the coaching modules screen. %1$s is a formatted date-time. -->
     <string name="modules_last_synced">সর্বশেষ সিঙ্ক %1$s</string>
     <string name="modules_last_synced_never">এখনও সিঙ্ক হয়নি</string>
@@ -464,8 +464,8 @@
     <string name="coaching_tab_badges">মাইলফলক</string>
     <string name="coaching_subtab_training">প্রশিক্ষণ</string>
     <string name="coaching_subtab_refresher">রিফ্রেশার</string>
-    <string name="coaching_subtab_knowledge">জ্ঞান</string>
-    <string name="coaching_section_practice_zone">অনুশীলন এলাকা</string>
+    <string name="coaching_subtab_knowledge">লাইব্রেরি</string>
+    <string name="coaching_section_practice_zone">অনুশীলন</string>
     <string name="coaching_section_learning_library">শিক্ষা লাইব্রেরি</string>
     <string name="refresher_hero_start_module">মডিউল শুরু করুন</string>
     <string name="practice_zone_tag_learning">শেখা</string>
