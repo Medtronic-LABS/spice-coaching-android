@@ -70,10 +70,9 @@ fun CoachingSubTabChips(
                     )
                     Text(
                         text = chip.label,
-                        style = MaterialTheme.typography.labelMedium,
+                        style = MaterialTheme.typography.labelLarge,
                         fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
                         color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
-                   
                     )
                 }
             }
