@@ -48,6 +48,18 @@ data class GroundingChunk(
     val hintsEn: List<String> = emptyList(),
     val questionsBn: List<String> = emptyList(),
     val questionsEn: List<String> = emptyList(),
+    /**
+     * The backend's per-card UUID from `/sync/modules` — the join key for the
+     * card-embedding vectors synced separately. Null for cards cached before the
+     * backend shipped the field; such cards simply never gain a dense vector.
+     */
+    val cardId: String? = null,
+    /**
+     * Cosine similarity of this card's synced embedding against the query vector,
+     * set during dense/hybrid retrieval. Null when the card was not among the
+     * dense candidates (or dense retrieval did not run).
+     */
+    val denseCos: Float? = null,
 ) {
     enum class Source { CARD, QUIZ }
 
@@ -62,6 +74,9 @@ data class GroundingChunk(
 
     /** Identifier suitable for telemetry / debugging. Stable per (module, source, position). */
     val chunkId: String = "$moduleFamilyId:${source.name.lowercase()}:$positionalId"
+
+    /** The card's short trace key, `family8:index`, as every stage's trace line prints it. */
+    val shortKey: String get() = "${moduleFamilyId.take(8)}:$positionalId"
 
     /** First positive page number (document id ignored) — for callers that only need a page anchor. */
     val firstPageNumber: Int? get() = sourcePages?.firstOrNull { it.pageNumber > 0 }?.pageNumber

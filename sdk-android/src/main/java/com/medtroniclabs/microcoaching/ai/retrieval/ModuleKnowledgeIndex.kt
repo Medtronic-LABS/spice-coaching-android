@@ -39,6 +39,7 @@ import kotlinx.serialization.json.contentOrNull
  */
 class ModuleKnowledgeIndex private constructor(
     private val chunks: List<GroundingChunk>,
+
     private val scorersEn: Map<Field, Bm25Scorer>,
     private val scorersBn: Map<Field, Bm25Scorer>,
     /** Per-corpus `synonyms_en` (abbreviation → expansion) fed to query expansion. */
@@ -79,10 +80,13 @@ class ModuleKnowledgeIndex private constructor(
      * @param scoreThreshold absolute floor on the combined field-weighted score.
      *   `0f` (used by unit tests) bypasses the gate to isolate "was it indexed?" from
      *   production tuning. The default [DEFAULT_SCORE_THRESHOLD] is deliberately low —
-     *   the semantic backstop is [ServeDecision] (topical evidence) plus the
+     *   the semantic backstop is [ServeGate] (topical evidence) plus the
      *   downstream groundedness gate, not a hand-tuned BM25 magnitude.
      * @param language which per-language index to score against.
      */
+    /** Every indexed chunk — the dense index joins card vectors onto these. */
+    internal val cardChunks: List<GroundingChunk> get() = chunks
+
     fun search(
         query: String,
         k: Int = 2,
@@ -252,7 +256,7 @@ class ModuleKnowledgeIndex private constructor(
 
         /**
          * Production retrieval floor on the combined score. Low by design: the real
-         * semantic guards are [ServeDecision] and the groundedness gate, so a low
+         * semantic guards are [ServeGate] and the groundedness gate, so a low
          * floor here cuts false refusals without admitting hallucination — the model
          * never sees un-retrieved content.
          */

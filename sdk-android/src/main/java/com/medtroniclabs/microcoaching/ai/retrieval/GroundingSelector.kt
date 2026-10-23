@@ -1,5 +1,7 @@
 package com.medtroniclabs.microcoaching.ai.retrieval
 
+import java.util.Locale
+
 /**
  * Shared grounding selection for both offline chat paths.
  *
@@ -18,9 +20,39 @@ object GroundingSelector {
         val nativeHits: List<GroundingChunk>,
         val englishHits: List<GroundingChunk>,
         val chosenLabel: String,
+        val fused: List<FusedEntry> = emptyList(),
     ) {
         val primary: GroundingChunk? get() = hits.firstOrNull()
     }
+
+    /** One fused candidate as the `FUSED` trace line reports it; a channel that did not return it is null. */
+    data class FusedEntry(
+        val key: String,
+        val bm25Rank: Int?,
+        val bm25Score: Float,
+        val denseRank: Int?,
+        val cos: Float?,
+    )
+
+    internal fun fusedEntries(
+        bm25Side: List<GroundingChunk>,
+        admittedDense: List<Pair<GroundingChunk, Float>>,
+        fused: List<GroundingChunk>,
+    ): List<FusedEntry> {
+        val bm25Rank = bm25Side.withIndex().associate { (i, c) -> c.chunkId to i + 1 }
+        val denseRank = admittedDense.withIndex().associate { (i, p) -> p.first.chunkId to i + 1 }
+        return fused.map {
+            FusedEntry(it.shortKey, bm25Rank[it.chunkId], it.score, denseRank[it.chunkId], it.denseCos)
+        }
+    }
+
+    /** `FUSED n=<count> order=[<key> bm25=<rank>/<score> dense=<rank>/<cos>, …]`; `-` for a channel that missed. */
+    fun describeFused(entries: List<FusedEntry>): String =
+        "FUSED n=${entries.size} order=[" + entries.joinToString(", ") { e ->
+            val bm25 = e.bm25Rank?.let { "$it/${"%.1f".format(Locale.US, e.bm25Score)}" } ?: "-"
+            val dense = e.denseRank?.let { "$it/${"%.2f".format(Locale.US, e.cos ?: 0f)}" } ?: "-"
+            "${e.key} bm25=$bm25 dense=$dense"
+        } + "]"
 
     fun select(
         nativeQuery: String,
@@ -29,6 +61,22 @@ object GroundingSelector {
         index: ModuleKnowledgeIndex,
         k: Int,
         scoreThreshold: Float,
+        /**
+         * Dense retrieval candidates (chunk + cosine, best first) from
+         * [DenseVectorIndex.search]. Empty when dense retrieval is disabled,
+         * the encoder is unavailable, or no vectors are synced — the selection is
+         * then exactly the BM25-only behaviour.
+         */
+        dense: List<Pair<GroundingChunk, Float>> = emptyList(),
+        rrfK: Int = 60,
+        /**
+         * Minimum cosine for a dense candidate to participate in fusion. A "top-k"
+         * dense list is top-k even when every cosine is weak, and a weak semantic
+         * opinion must not reshuffle the BM25 candidates — the same floor that gates
+         * dense evidence in the serve decision gates admission here. Callers pass
+         * `ServeTuning.cosFloor`.
+         */
+        denseAdmitFloor: Float = 0f,
     ): Selection {
         // Wider recall only when the EN index is consulted; pure-BN queries keep native BM25 order.
         val runEnglishSearch =
@@ -55,13 +103,16 @@ object GroundingSelector {
             emptyList()
         }
 
-        val merged = applyNativeAnchor(
+        val admittedDense = dense.filter { (_, cos) -> cos >= denseAdmitFloor }
+        val bm25Side = applyNativeAnchor(
             mergeAndRerank(nativeHits, englishHits, nativeQuery, runEnglishSearch),
             nativeHits,
             nativeQuery,
         )
+        val merged = fuseWithDense(bm25Side, admittedDense, rrfK)
         val chosenLabel = when {
             merged.isEmpty() -> "none"
+            admittedDense.isNotEmpty() -> "hybrid"
             englishHits.isEmpty() -> "native"
             merged.firstOrNull()?.chunkId == englishHits.firstOrNull()?.chunkId -> "merged (english helped)"
             merged.firstOrNull()?.chunkId == nativeHits.firstOrNull()?.chunkId -> "merged (native stayed top)"
@@ -72,7 +123,45 @@ object GroundingSelector {
             nativeHits = nativeHits,
             englishHits = englishHits,
             chosenLabel = chosenLabel,
+            fused = fusedEntries(bm25Side, admittedDense, merged.take(k)),
         )
+    }
+
+    /**
+     * Reciprocal-rank fusion of the BM25-side ranking with the dense candidates.
+     *
+     * RRF is used because the two score scales are incomparable (BM25 is unbounded,
+     * cosine is [-1,1]): each list contributes 1/(rrfK + rank) per chunk, so a card
+     * both retrievers agree on rises without either scale dominating. With [dense]
+     * empty the input list is returned as-is — the BM25-only paths are untouched.
+     *
+     * Every fused chunk that appears in [dense] carries its cosine in
+     * [GroundingChunk.denseCos]; a dense-only entrant (no BM25 rank) joins with
+     * `score = 0f` so downstream code never mistakes a cosine for a BM25 score.
+     */
+    internal fun fuseWithDense(
+        bm25: List<GroundingChunk>,
+        dense: List<Pair<GroundingChunk, Float>>,
+        rrfK: Int,
+    ): List<GroundingChunk> {
+        if (dense.isEmpty()) return bm25
+        val cosById = dense.associate { (chunk, cos) -> chunk.chunkId to cos }
+        val rrf = LinkedHashMap<String, Float>()
+        val byId = LinkedHashMap<String, GroundingChunk>()
+        bm25.forEachIndexed { rank, chunk ->
+            rrf[chunk.chunkId] = (rrf[chunk.chunkId] ?: 0f) + 1f / (rrfK + rank + 1)
+            byId.putIfAbsent(chunk.chunkId, chunk)
+        }
+        dense.forEachIndexed { rank, (chunk, _) ->
+            rrf[chunk.chunkId] = (rrf[chunk.chunkId] ?: 0f) + 1f / (rrfK + rank + 1)
+            byId.putIfAbsent(chunk.chunkId, chunk.copy(score = 0f))
+        }
+        return rrf.entries
+            .sortedByDescending { it.value }
+            .map { (id, _) ->
+                val chunk = byId.getValue(id)
+                cosById[id]?.let { chunk.copy(denseCos = it) } ?: chunk
+            }
     }
 
     private fun mergeAndRerank(

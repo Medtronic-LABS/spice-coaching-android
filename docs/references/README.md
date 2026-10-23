@@ -13,6 +13,9 @@ This folder explains **how the SDK works internally** — the mechanisms behind 
 | Doc | Topic |
 |---|---|
 | [chat.md](./chat.md) | How the on-device AI chat works — the input→retrieval→LLM→output pipeline, grounding, guardrails, translation, voice, and telemetry. |
+| [retrieval.md](./retrieval.md) | BM25 and dense retrieval, how the two rankings are fused, with a worked example on real corpus questions. |
+| [serve-gate.md](./serve-gate.md) | Fusion order, the ranker's pick, the gate's serve or refuse, every refusal reason, the post-model checks, and the trace lines. |
+| [gate-vocabulary.md](./gate-vocabulary.md) | Every word list retrieval and the gate compare against: gazetteer, synonyms, template/demographic/population words, where each comes from, and how much of the corpus it covers. |
 
 ---
 
@@ -38,7 +41,8 @@ The chat pipeline is the deepest under-the-hood subsystem and gets its own page 
    │  AnswerModeResolver ── ONLINE / ON_DEVICE_ASSISTED / DIRECT   │
    │        │                                                      │
    │        ├─ ChatBackendAnswerer ── POST /coaching/rag-query     │
-   │        └─ ChatLocalAnswerer ── BM25 → ServeDecision →         │
+   │        └─ ChatLocalAnswerer ── BM25 + dense → fusion →         │
+   │                                ranker → ServeGate →           │
    │                                LiteRT-LM (Qwen3, downloaded)  │
    │                                                               │
    │  ModuleKnowledgeIndex ── BM25 retrieval over synced module    │
@@ -48,8 +52,8 @@ The chat pipeline is the deepest under-the-hood subsystem and gets its own page 
    │  SyncCoordinator ── 15-min periodic + triggered sync          │
    │  TelemetryManager ── OpenTelemetry spans (optional)           │
    │  OnDeviceTranslator ── ML Kit BN↔EN                           │
-   │  microcoaching.db (Room, v35) ── modules, events, chat, state │
+   │  microcoaching.db (Room, v36) ── modules, events, chat, state │
    └──────────────────────────────────────────────────────────────┘
 ```
 
-Two hard rules shape every internal: **offline chat never serves ungrounded LLM output** (`ServeDecision` gates every on-device answer before any LLM call, degrading to clinician-authored card text on low-RAM or model-less devices), and the SDK's `microcoaching.db` is **fully separate** from the host's database.
+Two hard rules shape every internal: **offline chat never serves ungrounded LLM output** (`ServeGate` serves or refuses the ranker's one card before any LLM call, degrading to clinician-authored card text on low-RAM or model-less devices), and the SDK's `microcoaching.db` is **fully separate** from the host's database.

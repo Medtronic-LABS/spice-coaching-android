@@ -30,6 +30,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.medtroniclabs.microcoaching.R
+import com.medtroniclabs.microcoaching.ai.model.DownloadPhase
 import com.medtroniclabs.microcoaching.domain.decision.AnswerMode
 import com.medtroniclabs.microcoaching.ui.theme.CoachingTheme
 
@@ -51,6 +52,9 @@ import com.medtroniclabs.microcoaching.ui.theme.CoachingTheme
  * @param preferOnline the user's stored choice, which differs from [answerMode] whenever
  *   connectivity is missing.
  * @param modelDownload the model's lifecycle; anything in flight is reported here.
+ * @param smarterSearch true when the next on-device turn will use dense retrieval.
+ * @param rewriteAvailable false when the language model is switched off, which makes every
+ *   download the smarter-search download.
  */
 @Composable
 fun ChatModeBar(
@@ -58,6 +62,8 @@ fun ChatModeBar(
     networkAvailable: Boolean,
     preferOnline: Boolean,
     modelDownload: DownloadItemUiState,
+    smarterSearch: Boolean,
+    rewriteAvailable: Boolean,
     onOpenSheet: () -> Unit,
     onPauseDownload: () -> Unit,
     onResumeDownload: () -> Unit,
@@ -99,7 +105,7 @@ fun ChatModeBar(
             // Two weighted siblings would instead split the leftover between them and leave
             // the trailing control floating mid-row.
             Text(
-                text = stringResource(modeLabelRes(answerMode, blocked)),
+                text = stringResource(modeLabelRes(answerMode, blocked, smarterSearch)),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
@@ -126,7 +132,7 @@ fun ChatModeBar(
 
         if (inFlight) {
             Spacer(Modifier.height(4.dp))
-            UpgradeProgressRow(modelDownload)
+            UpgradeProgressRow(modelDownload, rewriteAvailable)
         }
     }
 }
@@ -141,11 +147,14 @@ fun ChatModeBar(
  * online and it cannot be reached — mentions the network, and even then names the answering
  * mode first and the reason second. Leading with the network made a deliberate choice read as
  * a degraded state.
+ *
+ * Direct mode names smarter search when it will run on the next turn.
  */
-private fun modeLabelRes(answerMode: AnswerMode, blockedByConnectivity: Boolean): Int = when {
+internal fun modeLabelRes(answerMode: AnswerMode, blockedByConnectivity: Boolean, smarterSearch: Boolean): Int = when {
     answerMode == AnswerMode.ONLINE -> R.string.chat_mode_bar_online
     blockedByConnectivity -> R.string.chat_mode_bar_on_device_online_unavailable
     answerMode == AnswerMode.ON_DEVICE_ASSISTED -> R.string.chat_mode_bar_on_device_assisted
+    smarterSearch -> R.string.chat_mode_bar_on_device_search
     else -> R.string.chat_mode_bar_on_device_direct
 }
 
@@ -187,27 +196,38 @@ private fun DownloadControls(
     }
 }
 
-@Composable
-private fun UpgradeProgressRow(modelDownload: DownloadItemUiState) {
-    val percent = modelDownload.progressPercentOrNull()
-    val label = when (modelDownload) {
-        is DownloadItemUiState.WaitingForNetwork -> stringResource(
-            if (modelDownload.wifiOnly) {
-                R.string.chat_mode_bar_upgrade_waiting_wifi
-            } else {
-                R.string.chat_mode_bar_upgrade_waiting_network
-            },
-        )
+/**
+ * The label under the download bar. One bar spans every artifact, so only the wording changes
+ * when the language model finishes and the encoder starts; naming what is arriving is what stops
+ * the second phase reading as the first one having stalled near the end. With the rewrite off
+ * the download is the encoder alone, so every state names smarter search, including those that
+ * carry no phase.
+ */
+internal fun progressLabelRes(state: DownloadItemUiState, rewriteAvailable: Boolean): Int {
+    val embeddings = !rewriteAvailable || state.downloadPhase() == DownloadPhase.EMBEDDINGS
+    return when (state) {
+        is DownloadItemUiState.WaitingForNetwork -> when {
+            state.wifiOnly && embeddings -> R.string.chat_mode_bar_search_waiting_wifi
+            state.wifiOnly -> R.string.chat_mode_bar_upgrade_waiting_wifi
+            embeddings -> R.string.chat_mode_bar_search_waiting_network
+            else -> R.string.chat_mode_bar_upgrade_waiting_network
+        }
         is DownloadItemUiState.Paused ->
-            stringResource(R.string.chat_mode_bar_upgrade_paused, percent ?: 0)
-        is DownloadItemUiState.Preparing ->
-            stringResource(R.string.chat_mode_bar_upgrade_preparing)
-        else -> if (percent != null) {
-            stringResource(R.string.chat_mode_bar_upgrade_progress, percent)
-        } else {
-            stringResource(R.string.chat_mode_bar_upgrade_preparing)
+            if (embeddings) R.string.chat_mode_bar_search_paused else R.string.chat_mode_bar_upgrade_paused
+        else -> when {
+            state.progressPercentOrNull() == null ->
+                if (embeddings) R.string.chat_mode_bar_search_preparing else R.string.chat_mode_bar_upgrade_preparing
+            embeddings -> R.string.chat_mode_bar_search_progress
+            else -> R.string.chat_mode_bar_upgrade_progress
         }
     }
+}
+
+@Composable
+private fun UpgradeProgressRow(modelDownload: DownloadItemUiState, rewriteAvailable: Boolean) {
+    val percent = modelDownload.progressPercentOrNull()
+    // Labels without a %d ignore the extra argument.
+    val label = stringResource(progressLabelRes(modelDownload, rewriteAvailable), percent ?: 0)
     Text(
         text = label,
         style = MaterialTheme.typography.labelSmall,
@@ -244,6 +264,19 @@ internal fun DownloadItemUiState.isModelTransferInFlight(): Boolean = when (this
     is DownloadItemUiState.Done,
     is DownloadItemUiState.Failed,
     is DownloadItemUiState.Unusable -> false
+}
+
+/**
+ * Which artifact the bar is currently reporting on.
+ *
+ * States that carry no phase are the ones that only happen before the first artifact
+ * starts, so the language model is the honest answer for them.
+ */
+internal fun DownloadItemUiState.downloadPhase(): DownloadPhase = when (this) {
+    is DownloadItemUiState.Downloading -> phase
+    is DownloadItemUiState.Paused -> phase
+    is DownloadItemUiState.WaitingForNetwork -> phase
+    else -> DownloadPhase.LANGUAGE_MODEL
 }
 
 /** Progress as a percentage, or null when no meaningful figure is available yet. */

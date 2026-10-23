@@ -110,6 +110,41 @@ data class MicroCoachingConfig internal constructor(
      */
     val wifiOnlyModelDownload: Boolean = false,
 
+    // ── Offline answering ─────────────────────────────────────────────────────
+    /**
+     * Enables smarter search: hybrid (BM25 + embedding) offline retrieval. Syncs per-card
+     * embedding vectors from `/sync/card-embeddings`, and makes the on-device query encoder
+     * (~176 MB) available to download.
+     *
+     * On by default, and a kill switch rather than an opt-in. What decides whether a device
+     * fetches the encoder is the user opting in on a phone that meets the smarter-search device
+     * rule ([com.medtroniclabs.microcoaching.ai.model.OnDeviceSetup.encoderDeviceEligible]).
+     *
+     * Turning it off keeps offline chat on BM25 alone: no vector sync, no encoder, and every
+     * dense evidence channel unreachable because nothing sets a cosine.
+     */
+    val enableDenseRetrieval: Boolean = true,
+
+    /**
+     * Lets the on-device language model reword the served card ("simple words").
+     *
+     * Off by default: offline chat then shows the card as written, found by standard or smarter
+     * search, and nothing offers, downloads or loads the language model. A language model left on
+     * disk by an earlier build is deleted on the next start. On, the opt-in covers the language
+     * model and the encoder in one download.
+     */
+    val enableOnDeviceRewrite: Boolean = false,
+
+    /**
+     * Smallest total RAM, in MiB, on which smarter search is offered and run.
+     *
+     * Separate from the language model's 3 GB tier, so it can be lowered on its own. The default is
+     * the 3 GB tier: on a 2 GB emulator the encoder added about 190 MB to SPICE's PSS, over the
+     * 150 MB budget (`docs/eval/2026-10-09-smarter-search-2gb-emulator.md`). Phones sold as 2 GB
+     * report about 1,700–1,900 MiB, so a host that accepts that cost can admit them with 1536.
+     */
+    val smarterSearchMinRamMb: Int = 3072,
+
     // ── Model Download Providers ──────────────────────────────────────────────
     /**
      * Ordered list of providers tried when downloading the model.
@@ -217,7 +252,10 @@ data class MicroCoachingConfig internal constructor(
     val forceLowEndMode: Boolean? = null,
 
     // ── Feature Flags ─────────────────────────────────────────────────────────
-    /** Enable the AI chat fragment (UC-2 entry point). */
+    /**
+     * **Reserved — no effect.** Stored here but read nowhere in the SDK; chat is always
+     * available. Kept for wire compatibility with existing host builder chains.
+     */
     val enableChat: Boolean = true,
     /**
      * When `true`, merge per-card `retrieval_hints_*` from APK assets
@@ -228,11 +266,14 @@ data class MicroCoachingConfig internal constructor(
     val enableRetrievalHintFixtureOverlay: Boolean = false,
     /** Enable Bengali voice input/output (Phase 6 — disabled by default). */
     val enableVoice: Boolean = false,
-    /** Enable micro-learning module UC-1 (Phase 3 — disabled by default). */
+    /**
+     * **Reserved — no effect.** Read nowhere in the SDK. Note the `false` default while
+     * micro-learning works regardless: that mismatch is the giveaway that this is not a gate.
+     */
     val enableLearnModule: Boolean = false,
-    /** Enable counselling apply module UC-2 (Phase 4 — disabled by default). */
+    /** **Reserved — no effect.** Read nowhere in the SDK. See [enableLearnModule]. */
     val enableApplyModule: Boolean = false,
-    /** Enable telemetry measure module UC-3 (Phase 5 — disabled by default). */
+    /** **Reserved — no effect.** Read nowhere in the SDK. See [enableLearnModule]. */
     val enableMeasureModule: Boolean = false,
     /**
      * Run synced gap-detection rules inside `onReferralSubmitted` (see
@@ -379,9 +420,6 @@ data class MicroCoachingConfig internal constructor(
  *           is replaced by the BM25 card content. Set equal to [groundednessFloor]
  *           for a single uniform floor; set to 0 to always show the model's answer on
  *           strong retrieval.
- * @property minFallbackServeScore Minimum BM25 score required before the on-device path
- *           is allowed to serve retrieved clinician-authored text as a fallback.
- *           Prevents weak off-topic hits from turning into confident card-body serves.
  * @property streamCapChars Hard cap on streamed response length before generation is
  *           aborted. Sized so a complete 2–4 sentence answer isn't cut mid-sentence.
  * @property maxResponseWords L4 length cap; responses longer than this are rejected
@@ -403,7 +441,6 @@ data class ChatTuning(
     val strongRetrievalScore: Float = 6.0f,
     val groundednessFloor: Float = 0.35f,
     val strongRetrievalGroundednessFloor: Float = 0.25f,
-    val minFallbackServeScore: Float = 20.0f,
     val streamCapChars: Int = 1100,
     val maxResponseWords: Int = 280,
     val enableDosageGuard: Boolean = true,
@@ -414,7 +451,7 @@ data class ChatTuning(
 
 /**
  * Score bounds for the offline serve/refuse decision
- * ([com.medtroniclabs.microcoaching.ai.retrieval.ServeDecision]). Evidence decides
+ * ([com.medtroniclabs.microcoaching.ai.retrieval.ServeGate]). Evidence decides
  * whether a card may be served at all; these decide when a match is too weak to
  * trust regardless.
  *
@@ -427,17 +464,33 @@ data class ChatTuning(
  * @property enScoreFloor Minimum score for a hit to be served on an English turn.
  * @property promoteRatio A hit may be served ahead of BM25 rank-1 only while it
  *           retains at least this fraction of rank-1's score.
- * @property bigramRescueScore Rescue band for mangled input (OCR, mistyped Bangla).
- *           Such a query matches no term, yet when it is a garbled rendition of a
- *           card's own words the character-bigram channel drives BM25 far above
- *           anything a topic mismatch reaches, so rank-1 is served without term
- *           evidence at or above this score.
+ * @property cosFloor Dense-retrieval evidence floor: a hit whose synced card
+ *           embedding reaches this cosine similarity against the query embedding
+ *           counts as servable evidence even with zero word overlap (the
+ *           population veto still wins). Only meaningful when dense retrieval is
+ *           enabled; hits without a vector carry no cosine and are unaffected.
+ * @property rrfK Reciprocal-rank-fusion constant for merging the BM25 and dense
+ *           rankings — larger values flatten the rank contribution of each list.
+ * @property denseTopK How many dense candidates enter the fusion.
+ * @property cosDominantFloor Cosine at which semantic agreement stops being a
+ *           tie-breaker and outranks authored title/hint overlap. Set well above
+ *           [cosFloor]: agreement qualifies a hit to be served, dominance decides
+ *           which hit wins, and hint density is right far more often than it is
+ *           wrong. Calibrated over the labelled audit set as the widest setting
+ *           that never promotes an unacceptable card or breaks a refusal.
+ * @property cosDominantMargin How far the leading cosine must sit above the
+ *           runner-up's before it counts as dominant. Two candidates a hundredth
+ *           apart are not a semantic verdict, just noise.
  */
 data class ServeTuning(
     val bnScoreFloor: Float = 25f,
     val enScoreFloor: Float = 40f,
     val promoteRatio: Float = 0.55f,
-    val bigramRescueScore: Float = 250f,
+    val cosFloor: Float = 0.50f,
+    val rrfK: Int = 60,
+    val denseTopK: Int = 3,
+    val cosDominantFloor: Float = 0.65f,
+    val cosDominantMargin: Float = 0.03f,
 )
 
 /**
