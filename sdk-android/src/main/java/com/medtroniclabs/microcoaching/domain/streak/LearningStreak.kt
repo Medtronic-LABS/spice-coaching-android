@@ -1,0 +1,108 @@
+package com.medtroniclabs.microcoaching.domain.streak
+
+import java.time.DayOfWeek
+import java.time.LocalDate
+
+/** How one day renders in the streak strip. */
+enum class StreakDayStatus {
+    /** Learned on a learning day. */
+    DONE,
+
+    /** A past learning day with no learning — breaks the streak. */
+    MISSED,
+
+    /** Friday / Saturday: the streak holds whether or not the CHW learned. */
+    REST,
+
+    /** Today, a learning day, nothing completed yet — "still to do", not a miss. */
+    PENDING,
+}
+
+data class StreakDay(
+    val date: LocalDate,
+    val status: StreakDayStatus,
+    val isToday: Boolean,
+)
+
+data class LearningStreak(
+    /** Consecutive learning days with a completion, rest days skipped. */
+    val currentStreak: Int,
+    /** The window, oldest first, ending today. */
+    val days: List<StreakDay>,
+    /** DONE days in the window. */
+    val learnedDays: Int,
+    /** Learning days in the window that are already decided (excludes rest days and a PENDING today). */
+    val learningDays: Int,
+    /** Most recent MISSED day in the window, for the "Missed …" nudge. */
+    val lastMissedDay: LocalDate?,
+    /** True when the CHW has never completed a training video. */
+    val isNewLearner: Boolean,
+) {
+    val isTodayPending: Boolean get() = days.lastOrNull()?.status == StreakDayStatus.PENDING
+}
+
+/**
+ * SK learning-streak rules (product decisions, 2026-11-05):
+ *
+ *  - A day counts when at least one training video was watched to the end.
+ *  - Days follow the phone's local calendar.
+ *  - Friday and Saturday are rest days: the streak holds through them and they
+ *    never add to it, even if the CHW learned.
+ *  - If today has no completion yet, today is PENDING and the streak shown is
+ *    the one as of yesterday — it only breaks once the day is over.
+ *
+ * Pure so it unit-tests without Room or a clock.
+ */
+object LearningStreakCalculator {
+
+    val REST_DAYS: Set<DayOfWeek> = setOf(DayOfWeek.FRIDAY, DayOfWeek.SATURDAY)
+
+    const val WINDOW_DAYS = 7
+
+    fun isRestDay(date: LocalDate): Boolean = date.dayOfWeek in REST_DAYS
+
+    fun compute(
+        activeDays: Set<LocalDate>,
+        today: LocalDate,
+        windowDays: Int = WINDOW_DAYS,
+    ): LearningStreak {
+        val days = (windowDays - 1 downTo 0).map { offset ->
+            val date = today.minusDays(offset.toLong())
+            val isToday = offset == 0
+            val status = when {
+                isRestDay(date) -> StreakDayStatus.REST
+                date in activeDays -> StreakDayStatus.DONE
+                isToday -> StreakDayStatus.PENDING
+                else -> StreakDayStatus.MISSED
+            }
+            StreakDay(date, status, isToday)
+        }
+
+        return LearningStreak(
+            currentStreak = currentStreak(activeDays, today),
+            days = days,
+            learnedDays = days.count { it.status == StreakDayStatus.DONE },
+            learningDays = days.count {
+                it.status == StreakDayStatus.DONE || it.status == StreakDayStatus.MISSED
+            },
+            lastMissedDay = days.lastOrNull { it.status == StreakDayStatus.MISSED }?.date,
+            isNewLearner = activeDays.isEmpty(),
+        )
+    }
+
+    private fun currentStreak(activeDays: Set<LocalDate>, today: LocalDate): Int {
+        val earliest = activeDays.minOrNull() ?: return 0
+        var streak = 0
+        var date = today
+        // Today only adds once it's done; an unfinished today neither adds nor breaks.
+        if (!isRestDay(today) && today in activeDays) streak++
+        date = date.minusDays(1)
+        while (!date.isBefore(earliest)) {
+            if (!isRestDay(date)) {
+                if (date in activeDays) streak++ else break
+            }
+            date = date.minusDays(1)
+        }
+        return streak
+    }
+}

@@ -56,6 +56,7 @@ fun CoachingTab(
     onShowRefresherQuiz: (queueFamilyIds: List<String>) -> Unit = {},
     onSeeAllRefreshers: () -> Unit = {},
     onOpenTrainingRequests: (() -> Unit)? = null, // SK-only; PO leaves it null
+    header: (@Composable () -> Unit)? = null, // SK-only learning-streak card; PO leaves it null
 ) {
     // No whole-tab error state: the three sub-tabs read three different tables
     // (module_cache, assigned_video, published_source_document) written by
@@ -70,6 +71,7 @@ fun CoachingTab(
     val manualSync = rememberManualInboundSyncState()
 
     Column(modifier) {
+        header?.invoke()
         // Chips stay fixed above the refresh area — only the sub-tab body scrolls.
         CoachingSubTabChips(
             chips = listOf(

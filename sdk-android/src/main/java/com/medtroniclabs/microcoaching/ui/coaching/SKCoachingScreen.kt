@@ -28,7 +28,7 @@ private const val TAB_BADGES = 1
 
 /**
  * SK (CHW) home: "Personalised Coaching" header with Coaching | Badges tabs.
- * Coaching reuses the full refresher/training/knowledge surface (plus a streak banner);
+ * Coaching reuses the full refresher/training/knowledge surface (plus the learning-streak card);
  * Badges shows learning achievements (stub-backed). There is no Leaderboard tab —
  * `ui/leaderboard/` stays in-tree, dormant and annotated `@Deprecated`.
  */
@@ -91,6 +91,7 @@ fun SKCoachingScreen(
                         onShowRefresherQuiz = onShowRefresherQuiz,
                         onSeeAllRefreshers = onSeeAllRefreshers,
                         onOpenTrainingRequests = onOpenTrainingRequests,
+                        header = { LearningStreakCard(chwId = chwId) },
                         modifier = Modifier.fillMaxSize(),
                     )
                 }

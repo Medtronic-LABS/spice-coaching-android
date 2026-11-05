@@ -457,7 +457,6 @@
     <string name="leaderboard_updated">আপডেট %1$s</string>
     <string name="leaderboard_achievement_leading">আপনি #১! আপনি %1$s-এ এগিয়ে আছেন। চালিয়ে যান!</string>
     <string name="leaderboard_xp_value">%1$s XP</string>
-    <string name="coaching_streak_banner">%1$d দিনের স্ট্রিক! চালিয়ে যান — আপনি দারুণ করছেন</string>
 
     <!-- ── Coaching sub-tabs restructure (Training/Refresher/Knowledge/Badges) ─── -->
     <!-- TODO(bn): translation review -->
