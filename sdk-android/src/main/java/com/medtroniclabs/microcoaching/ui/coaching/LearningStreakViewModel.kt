@@ -15,7 +15,6 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.stateIn
-import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.ZonedDateTime
@@ -33,8 +32,7 @@ class LearningStreakViewModel(
     /** null until the first read lands — the card renders nothing rather than a flash of 0. */
     val state: StateFlow<LearningStreak?> =
         combine(dao.observeVideoCompletionTimes(chwId), localToday()) { times, today ->
-            val zone = ZoneId.systemDefault()
-            val activeDays = times.mapTo(HashSet()) { Instant.ofEpochMilli(it).atZone(zone).toLocalDate() }
+            val activeDays = LearningStreakCalculator.activeDays(times, ZoneId.systemDefault())
             LearningStreakCalculator.compute(activeDays, today)
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 

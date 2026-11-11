@@ -10,6 +10,9 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.LocalDate
+import java.time.ZoneId
+import java.time.ZoneOffset
+import java.time.ZonedDateTime
 
 /**
  * Pins the SK learning-streak rules. Calendar used throughout (2026):
@@ -95,6 +98,43 @@ class LearningStreakCalculatorTest {
         val s = compute(d(11, 5), d(10, 29), d(11, 1), d(11, 2), d(11, 3), d(11, 4), d(11, 5))
         assertNull(s.lastMissedDay)
         assertEquals(6, s.currentStreak)
+    }
+
+    // ── activeDays: epoch timestamp → local calendar day ──────────────────────
+
+    private val dhaka = ZoneId.of("Asia/Dhaka") // UTC+6, no DST
+    private fun at(zone: ZoneId, month: Int, day: Int, h: Int, m: Int, s: Int = 0) =
+        ZonedDateTime.of(2026, month, day, h, m, s, 0, zone).toInstant().toEpochMilli()
+
+    @Test
+    fun `completions either side of local midnight land on different days`() {
+        val days = LearningStreakCalculator.activeDays(
+            listOf(at(dhaka, 11, 4, 23, 59, 59), at(dhaka, 11, 5, 0, 0, 1)),
+            dhaka,
+        )
+        assertEquals(setOf(d(11, 4), d(11, 5)), days)
+    }
+
+    @Test
+    fun `day is decided by the device zone, not UTC`() {
+        // 20:00 UTC on 4 Nov is 02:00 on 5 Nov in Dhaka.
+        val t = at(ZoneOffset.UTC, 11, 4, 20, 0)
+        assertEquals(setOf(d(11, 5)), LearningStreakCalculator.activeDays(listOf(t), dhaka))
+        assertEquals(setOf(d(11, 4)), LearningStreakCalculator.activeDays(listOf(t), ZoneOffset.UTC))
+    }
+
+    @Test
+    fun `several completions on one day collapse to a single active day`() {
+        val days = LearningStreakCalculator.activeDays(
+            listOf(at(dhaka, 11, 5, 9, 0), at(dhaka, 11, 5, 13, 30), at(dhaka, 11, 5, 21, 15)),
+            dhaka,
+        )
+        assertEquals(setOf(d(11, 5)), days)
+    }
+
+    @Test
+    fun `no completions means no active days`() {
+        assertTrue(LearningStreakCalculator.activeDays(emptyList(), dhaka).isEmpty())
     }
 
     @Test
