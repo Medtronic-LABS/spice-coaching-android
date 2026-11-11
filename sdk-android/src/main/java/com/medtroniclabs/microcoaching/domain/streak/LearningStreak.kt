@@ -1,7 +1,9 @@
 package com.medtroniclabs.microcoaching.domain.streak
 
 import java.time.DayOfWeek
+import java.time.Instant
 import java.time.LocalDate
+import java.time.ZoneId
 
 /** How one day renders in the streak strip. */
 enum class StreakDayStatus {
@@ -60,6 +62,14 @@ object LearningStreakCalculator {
     const val WINDOW_DAYS = 7
 
     fun isRestDay(date: LocalDate): Boolean = date.dayOfWeek in REST_DAYS
+
+    /**
+     * Collapses completion timestamps to the calendar days they fall on in [zone].
+     * `timestamp_local` is a plain epoch value (System.currentTimeMillis()), so the
+     * device zone decides which day a completion near midnight belongs to.
+     */
+    fun activeDays(completionTimesMs: Collection<Long>, zone: ZoneId): Set<LocalDate> =
+        completionTimesMs.mapTo(HashSet()) { Instant.ofEpochMilli(it).atZone(zone).toLocalDate() }
 
     fun compute(
         activeDays: Set<LocalDate>,

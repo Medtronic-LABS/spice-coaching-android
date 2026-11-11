@@ -35,6 +35,7 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -101,7 +102,7 @@ private fun rememberStreakPalette(): StreakPalette {
 }
 
 @Composable
-fun LearningStreakCardContent(streak: LearningStreak, modifier: Modifier = Modifier) {
+internal fun LearningStreakCardContent(streak: LearningStreak, modifier: Modifier = Modifier) {
     val palette = rememberStreakPalette()
     Column(
         modifier = modifier
@@ -134,12 +135,18 @@ fun LearningStreakCardContent(streak: LearningStreak, modifier: Modifier = Modif
 @Composable
 private fun Header(streak: LearningStreak, palette: StreakPalette) {
     val colors = CoachingTheme.colors
-    Row(verticalAlignment = Alignment.CenterVertically) {
+    // One TalkBack stop for title + subtitle; the decorative 🔥 tile is hidden so it
+    // isn't announced as "fire".
+    Row(
+        modifier = Modifier.semantics(mergeDescendants = true) {},
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
         Box(
             modifier = Modifier
                 .size(48.dp)
                 .clip(RoundedCornerShape(12.dp))
-                .background(palette.flame),
+                .background(palette.flame)
+                .clearAndSetSemantics {},
             contentAlignment = Alignment.Center,
         ) {
             Text(text = "🔥", style = MaterialTheme.typography.titleLarge)
