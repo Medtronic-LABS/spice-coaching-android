@@ -481,7 +481,22 @@
     <string name="leaderboard_updated">Updated %1$s</string>
     <string name="leaderboard_achievement_leading">You\'re #1! You\'re leading %1$s. Keep it up!</string>
     <string name="leaderboard_xp_value">%1$s XP</string>
-    <string name="coaching_streak_banner">%1$d-day streak! Keep going — you\'re on a roll</string>
+    <!-- SK learning-streak card (Coaching tab). Bangla pending from product. -->
+    <plurals name="learning_streak_title">
+        <item quantity="one">%d-day learning streak</item>
+        <item quantity="other">%d-day learning streak</item>
+    </plurals>
+    <string name="learning_streak_subtitle">You learned on %1$d of the last %2$d learning days</string>
+    <string name="learning_streak_today">Today</string>
+    <string name="learning_streak_rest_day">Rest day</string>
+    <string name="learning_streak_msg_new">Start your learning streak! Finish a training video today.</string>
+    <string name="learning_streak_msg_pending">Finish a training video today to keep your streak going.</string>
+    <string name="learning_streak_msg_missed">Missed %1$s. Learn a little every day to keep your streak growing.</string>
+    <string name="learning_streak_msg_keep_going">Great work! Keep learning every day to grow your streak.</string>
+    <string name="learning_streak_cd_done">%1$s, learned</string>
+    <string name="learning_streak_cd_missed">%1$s, missed</string>
+    <string name="learning_streak_cd_rest">%1$s, rest day</string>
+    <string name="learning_streak_cd_pending">%1$s, still to do</string>
 
     <!-- ── Coaching sub-tabs restructure (Training/Refresher/Knowledge/Milestones) ─ -->
     <!-- Label for the tab and its screen heading. Renamed to "Milestones" while the

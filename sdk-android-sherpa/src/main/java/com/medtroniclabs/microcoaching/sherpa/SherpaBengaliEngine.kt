@@ -8,6 +8,7 @@ import android.media.AudioRecord
 import android.media.MediaRecorder
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.util.Log
 import androidx.core.content.ContextCompat
 import com.k2fsa.sherpa.onnx.EndpointConfig
@@ -48,8 +49,12 @@ import java.util.concurrent.atomic.AtomicReference
  *      it for subsequent sessions.
  *   4. Audio capture runs on [Dispatchers.IO]; callbacks marshal to main.
  *
- * The recognizer's built-in endpointing (rule1/rule2/rule3) drives the
- * `onResult` callback when sherpa detects the user has stopped speaking.
+ * **Continuous dictation:** the recognizer's built-in endpointing
+ * (rule1/rule2/rule3) fires on every in-sentence pause, not just at the end of
+ * dictation — so a non-empty endpoint is treated as a sub-utterance boundary:
+ * the decoded text is appended to a running transcript and the stream is reset
+ * to keep capturing, instead of ending the session. Only [stopListening] (mic
+ * re-tap) or the [MAX_SESSION_MS] safety cap finalises via `onResult`.
  */
 class SherpaBengaliEngine(
     private val appContext: Context,
@@ -102,10 +107,17 @@ class SherpaBengaliEngine(
             val stream = rec.createStream()
             val readBuf = ShortArray(SAMPLE_CHUNK_SIZE)
             var lastPartial = ""
+            var accumulatedText = ""
             var done = false
+            val sessionStartMs = SystemClock.elapsedRealtime()
             try {
                 record.startRecording()
                 while (isActive && !done) {
+                    if (SystemClock.elapsedRealtime() - sessionStartMs >= MAX_SESSION_MS) {
+                        Log.i(TAG, "session exceeded $MAX_SESSION_MS ms — finalising")
+                        done = true
+                        break
+                    }
                     val read = record.read(readBuf, 0, readBuf.size)
                     if (read <= 0) continue
                     val samples = FloatArray(read) { i -> readBuf[i] / 32768f }
@@ -114,37 +126,41 @@ class SherpaBengaliEngine(
                         while (rec.isReady(stream)) rec.decode(stream)
 
                         val text = rec.getResult(stream).text.trim()
-                        if (text != lastPartial && text.isNotBlank()) {
-                            lastPartial = text
-                            mainHandler.post { listener.onPartial(text) }
+                        val merged = if (accumulatedText.isBlank()) text
+                        else "${accumulatedText.trim()} ${text.trim()}".trim()
+                        if (merged != lastPartial && merged.isNotBlank()) {
+                            lastPartial = merged
+                            mainHandler.post { listener.onPartial(merged) }
                         }
 
                         if (rec.isEndpoint(stream)) {
-                            val finalText = rec.getResult(stream).text.trim()
+                            val chunkText = rec.getResult(stream).text.trim()
                             rec.reset(stream)
-                            if (finalText.isNotBlank()) {
-                                done = true
-                                mainHandler.post { listener.onResult(finalText) }
+                            if (chunkText.isNotBlank()) {
+                                // Sub-utterance boundary — a pause, not the end of
+                                // dictation. Fold into the running transcript and
+                                // keep listening; do NOT finalise the session here.
+                                accumulatedText = if (accumulatedText.isBlank()) chunkText
+                                else "${accumulatedText.trim()} ${chunkText.trim()}"
+                                lastPartial = accumulatedText
+                                mainHandler.post { listener.onPartial(accumulatedText) }
                             } else {
-                                // Empty endpoint — keep listening (false trigger).
-                                lastPartial = ""
+                                // Empty endpoint — false trigger, nothing to fold in.
+                                lastPartial = accumulatedText
                             }
                         }
                     }
                 }
-                // If the loop exited via cancel() without an endpoint, finalize
-                // whatever partial we have so the caller's listener doesn't hang.
-                if (!done) {
-                    val finalText = synchronized(recognizerLock) {
-                        val t = rec.getResult(stream).text.trim()
-                        rec.reset(stream)
-                        t
-                    }
-                    mainHandler.post {
-                        if (finalText.isNotBlank()) listener.onResult(finalText)
-                        else listener.onResult("")
-                    }
+                // Loop exited via user stop or the session cap — finalise whatever
+                // was accumulated plus any trailing decoded text still in flight.
+                val finalText = synchronized(recognizerLock) {
+                    val trailing = rec.getResult(stream).text.trim()
+                    rec.reset(stream)
+                    if (trailing.isBlank()) accumulatedText
+                    else if (accumulatedText.isBlank()) trailing
+                    else "${accumulatedText.trim()} ${trailing.trim()}"
                 }
+                mainHandler.post { listener.onResult(finalText) }
             } catch (t: Throwable) {
                 Log.e(TAG, "capture loop crashed", t)
                 mainHandler.post { listener.onError(localized(R.string.chat_voice_error_generic)) }
@@ -251,6 +267,9 @@ class SherpaBengaliEngine(
 
         /** 100 ms at 16 kHz mono = 1600 samples. */
         private const val SAMPLE_CHUNK_SIZE = 1600
+
+        /** Hard cap on the wall-clock duration of a single continuous dictation session. */
+        private const val MAX_SESSION_MS = 90_000L
 
         private val REQUIRED_FILES = listOf(
             "encoder.onnx",

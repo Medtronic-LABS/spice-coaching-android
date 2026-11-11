@@ -283,6 +283,19 @@ interface CoachingEventDao {
     suspend fun countDistinctCardsViewed(chwId: String, moduleFamilyId: String): Int
 
     /** Delete all events that have been successfully synced (30-day retention cleanup). */
+    /**
+     * Local-clock timestamps of every training video the CHW watched to the end —
+     * the SK learning-streak source. Re-watches emit a fresh completion, so they
+     * count too. Safe as a full-history read: `coaching_event` is never pruned and
+     * there is at most one completion row per playback session.
+     */
+    @Query(
+        "SELECT timestamp_local FROM coaching_event " +
+            "WHERE chw_id = :chwId AND event_type = 'video_progress_updated' " +
+            "AND outcome = 'completed'",
+    )
+    fun observeVideoCompletionTimes(chwId: String): Flow<List<Long>>
+
     @Query("DELETE FROM coaching_event WHERE sync_status = 'synced'")
     suspend fun deleteSynced()
 
