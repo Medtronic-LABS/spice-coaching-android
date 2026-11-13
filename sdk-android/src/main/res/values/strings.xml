@@ -489,8 +489,8 @@
     <string name="learning_streak_subtitle">You learned on %1$d of the last %2$d learning days</string>
     <string name="learning_streak_today">Today</string>
     <string name="learning_streak_rest_day">Rest day</string>
-    <string name="learning_streak_msg_new">Start your learning streak! Finish a training video today.</string>
-    <string name="learning_streak_msg_pending">Finish a training video today to keep your streak going.</string>
+    <string name="learning_streak_msg_new">Start your learning streak! Finish a training video, refresher or module today.</string>
+    <string name="learning_streak_msg_pending">Finish a training video, refresher or module today to keep your streak going.</string>
     <string name="learning_streak_msg_missed">Missed %1$s. Learn a little every day to keep your streak growing.</string>
     <string name="learning_streak_msg_keep_going">Great work! Keep learning every day to grow your streak.</string>
     <string name="learning_streak_cd_done">%1$s, learned</string>

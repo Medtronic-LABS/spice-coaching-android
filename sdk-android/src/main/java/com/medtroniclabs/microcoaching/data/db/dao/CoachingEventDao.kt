@@ -282,27 +282,6 @@ interface CoachingEventDao {
     )
     suspend fun countDistinctCardsViewed(chwId: String, moduleFamilyId: String): Int
 
-    /**
-     * Epoch-millis timestamps of every training video the CHW watched to the end —
-     * the SK learning-streak source. Re-watches emit a fresh completion, so they
-     * count too; there is at most one completion row per playback session.
-     *
-     * Only Training-tab videos qualify: `video_progress_updated` is emitted solely by
-     * `VideoProgressReporter`, which `VideoPlayerActivity` creates only in training
-     * mode (videos embedded in module content record no progress).
-     *
-     * Reads full history because synced `coaching_event` rows are not pruned today
-     * (see [com.medtroniclabs.microcoaching.sync.pruneSyncedTelemetry]). If
-     * [deleteSynced] is ever wired into sync, past streak days will disappear —
-     * the streak would then need its own retained per-day record.
-     */
-    @Query(
-        "SELECT timestamp_local FROM coaching_event " +
-            "WHERE chw_id = :chwId AND event_type = 'video_progress_updated' " +
-            "AND outcome = 'completed'",
-    )
-    fun observeVideoCompletionTimes(chwId: String): Flow<List<Long>>
-
     /** Delete all events that have been successfully synced (30-day retention cleanup). */
     @Query("DELETE FROM coaching_event WHERE sync_status = 'synced'")
     suspend fun deleteSynced()

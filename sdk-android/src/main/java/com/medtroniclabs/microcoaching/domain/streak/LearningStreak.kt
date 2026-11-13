@@ -46,7 +46,9 @@ data class LearningStreak(
 /**
  * SK learning-streak rules (product decisions, 2026-11-05):
  *
- *  - A day counts when at least one training video was watched to the end.
+ *  - A day counts when at least one learning item was **finished** (not necessarily
+ *    passed): a training video watched to the end, a module/refresher quiz with its
+ *    last question answered, or the last card of a quiz-less lesson reached.
  *  - Days follow the phone's local calendar.
  *  - Friday and Saturday are rest days ("bonus days", product 2026-11-13): learning on
  *    one adds +1 and shows as DONE; skipping one never breaks the streak (REST).

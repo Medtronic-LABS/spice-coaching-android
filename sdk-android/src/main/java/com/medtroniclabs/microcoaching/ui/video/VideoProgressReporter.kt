@@ -2,6 +2,7 @@ package com.medtroniclabs.microcoaching.ui.video
 
 import android.util.Log
 import com.medtroniclabs.microcoaching.MicroCoachingSDK
+import com.medtroniclabs.microcoaching.data.db.entity.LearningCompletionEntity
 import com.medtroniclabs.microcoaching.data.db.dao.AssignedVideoDao
 import com.medtroniclabs.microcoaching.domain.telemetry.EventRecorder
 import kotlinx.coroutines.CoroutineScope
@@ -79,6 +80,11 @@ internal class VideoProgressReporter(
                     dropOffMs = null,
                 )
             }.onFailure { Log.w(TAG, "completed telemetry failed: ${it.message}") }
+            // Streak: a training video watched to the end (re-watches count too).
+            runCatching {
+                MicroCoachingSDK.getInstance()
+                    .logLearningCompletion(chwId, LearningCompletionEntity.KIND_VIDEO, videoId)
+            }.onFailure { Log.w(TAG, "learning completion log failed: ${it.message}") }
             runCatching { MicroCoachingSDK.getInstance().flushTelemetryNow() }
         }
     }
