@@ -497,6 +497,7 @@
     <string name="learning_streak_cd_missed">%1$s, missed</string>
     <string name="learning_streak_cd_rest">%1$s, rest day</string>
     <string name="learning_streak_cd_pending">%1$s, still to do</string>
+    <string name="learning_streak_start">Start your learning streak</string>
 
     <!-- ── Coaching sub-tabs restructure (Training/Refresher/Knowledge/Milestones) ─ -->
     <!-- Label for the tab and its screen heading. Renamed to "Milestones" while the

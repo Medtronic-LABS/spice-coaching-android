@@ -1,7 +1,11 @@
 package com.medtroniclabs.microcoaching.ui.coaching
 
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,16 +21,21 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Bedtime
 import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
@@ -34,10 +43,11 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -101,80 +111,127 @@ private fun rememberStreakPalette(): StreakPalette {
     }
 }
 
+/**
+ * Collapsed by default: a slim pill (curved ends, straight top/bottom) with just the
+ * day count — "N-day learning streak". Tapping it grows the card into the
+ * full view (subtitle, 7-day strip, nudge); tapping again collapses it. The state is
+ * not persisted — every visit to the screen starts collapsed (product, 2026-11-13).
+ */
 @Composable
 internal fun LearningStreakCardContent(streak: LearningStreak, modifier: Modifier = Modifier) {
     val palette = rememberStreakPalette()
+    var expanded by rememberSaveable { mutableStateOf(false) }
+    // 50.dp clamps to half the collapsed height → a true pill; eases to 16.dp when open.
+    val corner by animateDpAsState(if (expanded) 16.dp else 50.dp, label = "streakCorner")
+    val shape = RoundedCornerShape(corner)
+
     Column(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 8.dp)
-            .clip(RoundedCornerShape(16.dp))
+            .clip(shape)
             .background(palette.cardBackground)
-            .border(1.dp, palette.cardBorder, RoundedCornerShape(16.dp))
-            .padding(16.dp),
+            .border(1.dp, palette.cardBorder, shape)
+            .animateContentSize(),
     ) {
-        Header(streak, palette)
-        Spacer(Modifier.height(16.dp))
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            streak.days.forEach { DayCell(it, palette, Modifier.weight(1f)) }
-        }
-        Spacer(Modifier.height(12.dp))
-        Text(
-            text = nudgeText(streak),
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(10.dp))
-                .background(palette.nudgeBackground)
-                .padding(horizontal = 12.dp, vertical = 8.dp),
-            color = palette.nudgeText,
-            style = MaterialTheme.typography.bodySmall,
+        StreakSummaryRow(
+            streak = streak,
+            palette = palette,
+            expanded = expanded,
+            onToggle = { expanded = !expanded },
         )
-    }
-}
-
-@Composable
-private fun Header(streak: LearningStreak, palette: StreakPalette) {
-    val colors = CoachingTheme.colors
-    // One TalkBack stop for title + subtitle; the decorative 🔥 tile is hidden so it
-    // isn't announced as "fire".
-    Row(
-        modifier = Modifier.semantics(mergeDescendants = true) {},
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(
-            modifier = Modifier
-                .size(48.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(palette.flame)
-                .clearAndSetSemantics {},
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(text = "🔥", style = MaterialTheme.typography.titleLarge)
-        }
-        Spacer(Modifier.width(12.dp))
-        Column {
-            Text(
-                text = pluralStringResource(
-                    R.plurals.learning_streak_title,
-                    streak.currentStreak,
-                    streak.currentStreak,
-                ),
-                color = colors.textStrong,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-            )
-            if (streak.learningDays > 0) {
+        if (expanded) {
+            Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp)) {
+                if (streak.learningDays > 0) {
+                    Text(
+                        text = stringResource(
+                            R.string.learning_streak_subtitle,
+                            streak.learnedDays,
+                            streak.learningDays,
+                        ),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Spacer(Modifier.height(12.dp))
+                }
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    streak.days.forEach { DayCell(it, palette, Modifier.weight(1f)) }
+                }
+                Spacer(Modifier.height(12.dp))
                 Text(
-                    text = stringResource(
-                        R.string.learning_streak_subtitle,
-                        streak.learnedDays,
-                        streak.learningDays,
-                    ),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    text = nudgeText(streak),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(palette.nudgeBackground)
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    color = palette.nudgeText,
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
         }
+    }
+}
+
+/**
+ * The always-visible row: 🔥 · "N-day learning streak" (or "Start your learning
+ * streak") · chevron. The whole row is the toggle,
+ * announced by TalkBack as one button ("…, double-tap to Expand").
+ */
+@Composable
+private fun StreakSummaryRow(
+    streak: LearningStreak,
+    palette: StreakPalette,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+) {
+    val colors = CoachingTheme.colors
+    val chevronRotation by animateFloatAsState(if (expanded) 180f else 0f, label = "streakChevron")
+    val title = if (streak.isNewLearner) {
+        stringResource(R.string.learning_streak_start)
+    } else {
+        pluralStringResource(R.plurals.learning_streak_title, streak.currentStreak, streak.currentStreak)
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(
+                role = Role.Button,
+                onClickLabel = stringResource(if (expanded) R.string.common_collapse else R.string.common_expand),
+                onClick = onToggle,
+            )
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(32.dp)
+                .clip(CircleShape)
+                .background(palette.flame)
+                .clearAndSetSemantics {},
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(text = "🔥", style = MaterialTheme.typography.bodyLarge)
+        }
+        Spacer(Modifier.width(10.dp))
+        Text(
+            text = title,
+            modifier = Modifier.weight(1f),
+            color = colors.textStrong,
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Icon(
+            imageVector = Icons.Outlined.ExpandMore,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier
+                .size(24.dp)
+                .rotate(chevronRotation),
+        )
     }
 }
 

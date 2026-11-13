@@ -7,13 +7,13 @@ import java.time.ZoneId
 
 /** How one day renders in the streak strip. */
 enum class StreakDayStatus {
-    /** Learned on a learning day. */
+    /** Learned that day — any day, including a Friday/Saturday bonus day. */
     DONE,
 
     /** A past learning day with no learning — breaks the streak. */
     MISSED,
 
-    /** Friday / Saturday: the streak holds whether or not the CHW learned. */
+    /** Friday / Saturday with no learning: the streak holds (a rest day that was learned on is DONE). */
     REST,
 
     /** Today, a learning day, nothing completed yet — "still to do", not a miss. */
@@ -27,13 +27,13 @@ data class StreakDay(
 )
 
 data class LearningStreak(
-    /** Consecutive learning days with a completion, rest days skipped. */
+    /** Consecutive days with a completion; rest days count when learned on, are skipped when not. */
     val currentStreak: Int,
     /** The window, oldest first, ending today. */
     val days: List<StreakDay>,
     /** DONE days in the window. */
     val learnedDays: Int,
-    /** Learning days in the window that are already decided (excludes rest days and a PENDING today). */
+    /** Days in the window that are already decided: DONE + MISSED (excludes unlearned rest days and a PENDING today). */
     val learningDays: Int,
     /** Most recent MISSED day in the window, for the "Missed …" nudge. */
     val lastMissedDay: LocalDate?,
@@ -48,8 +48,8 @@ data class LearningStreak(
  *
  *  - A day counts when at least one training video was watched to the end.
  *  - Days follow the phone's local calendar.
- *  - Friday and Saturday are rest days: the streak holds through them and they
- *    never add to it, even if the CHW learned.
+ *  - Friday and Saturday are rest days ("bonus days", product 2026-11-13): learning on
+ *    one adds +1 and shows as DONE; skipping one never breaks the streak (REST).
  *  - If today has no completion yet, today is PENDING and the streak shown is
  *    the one as of yesterday — it only breaks once the day is over.
  *
@@ -80,8 +80,8 @@ object LearningStreakCalculator {
             val date = today.minusDays(offset.toLong())
             val isToday = offset == 0
             val status = when {
+                date in activeDays -> StreakDayStatus.DONE // rest days included: bonus +1
                 isRestDay(date) -> StreakDayStatus.REST
-                date in activeDays -> StreakDayStatus.DONE
                 isToday -> StreakDayStatus.PENDING
                 else -> StreakDayStatus.MISSED
             }
@@ -104,12 +104,15 @@ object LearningStreakCalculator {
         val earliest = activeDays.minOrNull() ?: return 0
         var streak = 0
         var date = today
-        // Today only adds once it's done; an unfinished today neither adds nor breaks.
-        if (!isRestDay(today) && today in activeDays) streak++
+        // Today only adds once it's done (rest day or not); an unfinished today
+        // neither adds nor breaks.
+        if (today in activeDays) streak++
         date = date.minusDays(1)
         while (!date.isBefore(earliest)) {
-            if (!isRestDay(date)) {
-                if (date in activeDays) streak++ else break
+            when {
+                date in activeDays -> streak++ // learning or bonus rest day
+                isRestDay(date) -> Unit // skipped rest day: hold
+                else -> break // missed learning day
             }
             date = date.minusDays(1)
         }

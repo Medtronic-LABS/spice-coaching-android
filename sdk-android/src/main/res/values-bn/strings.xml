@@ -468,6 +468,23 @@
     <string name="coaching_section_learning_library">শিক্ষা লাইব্রেরি</string>
     <!-- LEAP-133. Draft translation — pending product review. -->
     <string name="learning_library_show_all">সব দেখুন (%1$d)</string>
+    <!-- SK learning-streak card (LEAP-132). Draft translations — pending product review. -->
+    <plurals name="learning_streak_title">
+        <item quantity="one">%d দিনের শেখার স্ট্রিক</item>
+        <item quantity="other">%d দিনের শেখার স্ট্রিক</item>
+    </plurals>
+    <string name="learning_streak_subtitle">গত %2$d শেখার দিনের মধ্যে %1$d দিন আপনি শিখেছেন</string>
+    <string name="learning_streak_today">আজ</string>
+    <string name="learning_streak_rest_day">বিশ্রামের দিন</string>
+    <string name="learning_streak_msg_new">আপনার শেখার স্ট্রিক শুরু করুন! আজ একটি প্রশিক্ষণ ভিডিও শেষ করুন।</string>
+    <string name="learning_streak_msg_pending">স্ট্রিক ধরে রাখতে আজ একটি প্রশিক্ষণ ভিডিও শেষ করুন।</string>
+    <string name="learning_streak_msg_missed">%1$s মিস করেছেন। স্ট্রিক বাড়াতে প্রতিদিন একটু করে শিখুন।</string>
+    <string name="learning_streak_msg_keep_going">দারুণ! স্ট্রিক বাড়াতে প্রতিদিন শিখতে থাকুন।</string>
+    <string name="learning_streak_cd_done">%1$s, শিখেছেন</string>
+    <string name="learning_streak_cd_missed">%1$s, মিস হয়েছে</string>
+    <string name="learning_streak_cd_rest">%1$s, বিশ্রামের দিন</string>
+    <string name="learning_streak_cd_pending">%1$s, এখনও বাকি</string>
+    <string name="learning_streak_start">আপনার শেখার স্ট্রিক শুরু করুন</string>
     <string name="refresher_hero_start_module">মডিউল শুরু করুন</string>
     <string name="practice_zone_tag_learning">শেখা</string>
     <string name="badge_new">নতুন</string>
