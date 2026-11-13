@@ -92,7 +92,6 @@ class VisitCompletedHandlerTest {
         override suspend fun getUnsyncedQuizAttempts(chwId: String): List<CoachingEventEntity> = emptyList()
         override fun getEventCountFlow(): Flow<Int> = flowOf(0)
         override fun observeModuleRequested(chwId: String): Flow<List<CoachingEventEntity>> = flowOf(emptyList())
-        override fun observeVideoCompletionTimes(chwId: String): Flow<List<Long>> = flowOf(emptyList())
         override suspend fun getModuleRequested(chwId: String): List<CoachingEventEntity> = emptyList()
         override suspend fun countDistinctCardsViewed(chwId: String, moduleFamilyId: String): Int = 0
         override suspend fun markSynced(eventIds: List<String>, syncedAt: Long) = Unit

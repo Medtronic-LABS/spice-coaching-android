@@ -141,7 +141,7 @@ fun TrainingCard(
  * bold white label) — kept file-local here since the label text differs.
  */
 @Composable
-private fun TrainingNewBadge(modifier: Modifier = Modifier) {
+internal fun TrainingNewBadge(modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(4.dp))
