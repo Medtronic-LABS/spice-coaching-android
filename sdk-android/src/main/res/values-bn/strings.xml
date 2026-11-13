@@ -466,6 +466,8 @@
     <string name="coaching_subtab_knowledge">লাইব্রেরি</string>
     <string name="coaching_section_practice_zone">অনুশীলন</string>
     <string name="coaching_section_learning_library">শিক্ষা লাইব্রেরি</string>
+    <!-- LEAP-133. Draft translation — pending product review. -->
+    <string name="learning_library_show_all">সব দেখুন (%1$d)</string>
     <string name="refresher_hero_start_module">মডিউল শুরু করুন</string>
     <string name="practice_zone_tag_learning">শেখা</string>
     <string name="badge_new">নতুন</string>

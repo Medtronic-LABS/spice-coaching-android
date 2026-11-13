@@ -507,6 +507,8 @@
     <string name="coaching_subtab_knowledge">Knowledge</string>
     <string name="coaching_section_practice_zone">Practice Zone</string>
     <string name="coaching_section_learning_library">Learning Library</string>
+    <!-- LEAP-133: SK Learning Library expands in place. Bangla pending from product. -->
+    <string name="learning_library_show_all">Show all (%1$d)</string>
     <string name="refresher_hero_start_module">Start module</string>
     <string name="practice_zone_tag_learning">Learning</string>
     <string name="badge_new">NEW</string>
