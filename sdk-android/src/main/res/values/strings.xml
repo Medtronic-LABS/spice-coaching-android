@@ -489,14 +489,15 @@
     <string name="learning_streak_subtitle">You learned on %1$d of the last %2$d learning days</string>
     <string name="learning_streak_today">Today</string>
     <string name="learning_streak_rest_day">Rest day</string>
-    <string name="learning_streak_msg_new">Start your learning streak! Finish a training video today.</string>
-    <string name="learning_streak_msg_pending">Finish a training video today to keep your streak going.</string>
+    <string name="learning_streak_msg_new">Start your learning streak! Finish a training video, refresher or module today.</string>
+    <string name="learning_streak_msg_pending">Finish a training video, refresher or module today to keep your streak going.</string>
     <string name="learning_streak_msg_missed">Missed %1$s. Learn a little every day to keep your streak growing.</string>
     <string name="learning_streak_msg_keep_going">Great work! Keep learning every day to grow your streak.</string>
     <string name="learning_streak_cd_done">%1$s, learned</string>
     <string name="learning_streak_cd_missed">%1$s, missed</string>
     <string name="learning_streak_cd_rest">%1$s, rest day</string>
     <string name="learning_streak_cd_pending">%1$s, still to do</string>
+    <string name="learning_streak_start">Start your learning streak</string>
 
     <!-- ── Coaching sub-tabs restructure (Training/Refresher/Knowledge/Milestones) ─ -->
     <!-- Label for the tab and its screen heading. Renamed to "Milestones" while the
@@ -507,6 +508,8 @@
     <string name="coaching_subtab_knowledge">Knowledge</string>
     <string name="coaching_section_practice_zone">Practice Zone</string>
     <string name="coaching_section_learning_library">Learning Library</string>
+    <!-- LEAP-133: SK Learning Library expands in place. Bangla pending from product. -->
+    <string name="learning_library_show_all">Show all (%1$d)</string>
     <string name="refresher_hero_start_module">Start module</string>
     <string name="practice_zone_tag_learning">Learning</string>
     <string name="badge_new">NEW</string>

@@ -35,7 +35,7 @@ import com.medtroniclabs.microcoaching.ui.learn.modules.components.RefresherHero
 import com.medtroniclabs.microcoaching.ui.learn.modules.components.SectionHeader
 import com.medtroniclabs.microcoaching.ui.learn.modules.components.TrainingGrid
 import com.medtroniclabs.microcoaching.ui.learn.modules.components.TrainingRequestEntryCard
-import com.medtroniclabs.microcoaching.ui.learn.modules.components.TrainingRow
+import com.medtroniclabs.microcoaching.ui.learn.modules.components.LearningLibraryList
 
 /**
  * Refresher sub-tab of the Coaching tab, shown for both SK and PO: a hero card for the newest
@@ -48,7 +48,8 @@ import com.medtroniclabs.microcoaching.ui.learn.modules.components.TrainingRow
  * Zone tile runs [onRefresherStart] then [onShowRefresherQuiz], queued with the full active
  * pool so the refresher bottom sheet's "Next refresher" chain is unchanged.
  *
- * @param libraryAsGrid PO renders the Learning Library as a 4-up grid; SK as a scrolling row.
+ * @param libraryAsGrid PO renders the Learning Library as a 4-up grid with See all; SK as a
+ *   vertical list showing 5 then "Show all (N)" in place ([LearningLibraryList], LEAP-133).
  * @param onOpenTrainingRequests SK-only entry point; null (the default) omits the row.
  */
 @Composable
@@ -161,10 +162,10 @@ fun RefresherSubTab(
                 newModuleFamilyId = newest?.moduleFamilyId,
             )
         } else {
-            TrainingRow(
+            // SK (LEAP-133): vertical list, first 5 then "Show all (N)" in place — no See all.
+            LearningLibraryList(
                 modules = training,
                 onSelect = onModuleSelected,
-                onSeeAll = onSeeAllTraining,
                 title = libraryTitle,
                 newModuleFamilyId = newest?.moduleFamilyId,
             )

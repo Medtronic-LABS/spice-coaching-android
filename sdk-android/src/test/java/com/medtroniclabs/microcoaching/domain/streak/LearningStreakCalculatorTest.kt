@@ -61,10 +61,38 @@ class LearningStreakCalculatorTest {
     }
 
     @Test
-    fun `learning on a rest day does not add to the streak`() {
+    fun `learning on a rest day is a bonus day that adds to the streak`() {
+        // Fri 30 + Sat 31 (both learned) + Sun 1 = 3
         val s = compute(d(11, 1), d(10, 30), d(10, 31), d(11, 1))
+        assertEquals(3, s.currentStreak)
+        assertEquals(DONE, s.days.single { it.date == d(10, 30) }.status)
+        assertEquals(DONE, s.days.single { it.date == d(10, 31) }.status)
+    }
+
+    @Test
+    fun `first ever completion on a rest-day today counts immediately`() {
+        // Reported case: nothing before, one training on Friday 6 Nov → 1-day streak, not 0.
+        val s = compute(d(11, 6), d(11, 6))
         assertEquals(1, s.currentStreak)
-        assertEquals(REST, s.days.single { it.date == d(10, 30) }.status)
+        assertEquals(DONE, s.days.last().status)
+        assertFalse(s.isNewLearner)
+    }
+
+    @Test
+    fun `a skipped rest day between learned days still holds`() {
+        // Thu 29 → Fri 30 learned (bonus) → Sat 31 skipped (hold) → Sun 1 = 3
+        val s = compute(d(11, 1), d(10, 29), d(10, 30), d(11, 1))
+        assertEquals(3, s.currentStreak)
+        assertEquals(DONE, s.days.single { it.date == d(10, 30) }.status)
+        assertEquals(REST, s.days.single { it.date == d(10, 31) }.status)
+    }
+
+    @Test
+    fun `a bonus rest day does not rescue a missed learning day before it`() {
+        // Wed 4 learned, Thu 5 missed, Fri 6 learned (today) → only Fri counts = 1
+        val s = compute(d(11, 6), d(11, 4), d(11, 6))
+        assertEquals(1, s.currentStreak)
+        assertEquals(MISSED, s.days.single { it.date == d(11, 5) }.status)
     }
 
     @Test
@@ -76,7 +104,7 @@ class LearningStreakCalculatorTest {
     }
 
     @Test
-    fun `today being a rest day is neither pending nor counted`() {
+    fun `an unlearned rest-day today is neither pending nor counted`() {
         val s = compute(d(11, 6), d(11, 4), d(11, 5))
         assertEquals(2, s.currentStreak)
         assertEquals(REST, s.days.last().status)

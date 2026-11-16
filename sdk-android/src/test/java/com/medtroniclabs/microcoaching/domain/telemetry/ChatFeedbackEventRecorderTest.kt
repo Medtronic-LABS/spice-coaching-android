@@ -144,7 +144,6 @@ class ChatFeedbackEventRecorderTest {
         override suspend fun getLatestCorrectQuestionIdsSince(chwId: String, moduleFamilyId: String, sinceMillis: Long): List<String> = error("unused")
         override fun getEventCountFlow(): Flow<Int> = error("unused")
         override fun observeModuleRequested(chwId: String): Flow<List<CoachingEventEntity>> = error("unused")
-        override fun observeVideoCompletionTimes(chwId: String): Flow<List<Long>> = error("unused")
         override suspend fun getModuleRequested(chwId: String): List<CoachingEventEntity> = error("unused")
         override suspend fun markSynced(eventIds: List<String>, syncedAt: Long) = error("unused")
         override suspend fun markFailed(eventIds: List<String>) = error("unused")

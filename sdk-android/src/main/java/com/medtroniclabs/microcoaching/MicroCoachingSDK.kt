@@ -10,6 +10,7 @@ import android.util.Log
 import com.medtroniclabs.microcoaching.data.asset.AssetCache
 import com.medtroniclabs.microcoaching.data.db.MICRO_COACHING_ROOM_VERSION
 import com.medtroniclabs.microcoaching.data.db.MicroCoachingDatabase
+import com.medtroniclabs.microcoaching.data.db.entity.LearningCompletionEntity
 import com.medtroniclabs.microcoaching.data.db.entity.ModuleEntity
 import com.medtroniclabs.microcoaching.data.db.entity.sortedForDisplay
 import com.medtroniclabs.microcoaching.data.db.entity.MorningCardCacheEntity
@@ -859,6 +860,25 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
     }
 
     /**
+     * Appends one row to the device-local learning-completion log that drives the SK
+     * streak. Local only — never telemetry — so it cannot double-count gap folds or
+     * learning points backend-side. Failures are logged, never thrown: a missed streak
+     * row must not break the completion write it rides on.
+     */
+    internal suspend fun logLearningCompletion(chwId: String, kind: String, itemId: String?) {
+        runCatching {
+            database.learningCompletionDao().insert(
+                LearningCompletionEntity(
+                    chwId = chwId,
+                    kind = kind,
+                    itemId = itemId,
+                    completedAt = System.currentTimeMillis(),
+                ),
+            )
+        }.onFailure { Log.w(TAG, "learning completion log failed ($kind): ${it.message}") }
+    }
+
+    /**
      * Persist a module-quiz outcome locally and update [ChwModuleCompletionEntity].
      * Telemetry is emitted by the caller: the Learn flow already records one
      * `module_quiz_attempted` per question via [EventRecorder], and an
@@ -885,6 +905,8 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
                     reinforcementDays = config.periodicRefreshDays,
                 )
                 dao.upsert(updated)
+                // Streak: finishing counts, pass or fail (module, hero or refresher quiz).
+                logLearningCompletion(chwId, LearningCompletionEntity.KIND_QUIZ, moduleFamilyId)
                 refreshLocalBadgeEarning()
             } catch (e: Exception) {
                 Log.w(TAG, "onModuleQuizCompleted persist failed: ${e.message}")
@@ -919,6 +941,8 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
                     reinforcementDays = config.periodicRefreshDays,
                 )
                 dao.upsert(updated)
+                // Streak: reaching the last card of a quiz-less module / cards-only refresher.
+                logLearningCompletion(chwId, LearningCompletionEntity.KIND_CARDS, moduleFamilyId)
                 refreshLocalBadgeEarning()
                 // Opening the lesson stamped an in-session "in_progress" overlay, and
                 // the mapper reads that overlay ahead of the table — so writing the row
