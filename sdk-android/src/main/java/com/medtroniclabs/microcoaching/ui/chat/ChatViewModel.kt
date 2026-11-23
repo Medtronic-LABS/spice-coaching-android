@@ -1,5 +1,9 @@
 package com.medtroniclabs.microcoaching.ui.chat
 
+import com.medtroniclabs.microcoaching.analytics.CoachingAnalytics
+import com.medtroniclabs.microcoaching.analytics.CoachingEvents
+import com.medtroniclabs.microcoaching.analytics.CoachingParams
+import com.medtroniclabs.microcoaching.analytics.CoachingValues
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
@@ -378,6 +382,7 @@ class ChatViewModel(
             Language.ENGLISH ->
                 suggestion.question.ifBlank { suggestion.banglaQuestion }
         }
+        gaNextAskSource = CoachingValues.SUGGESTED
         sendMessage(text, moduleFamilyId = suggestion.moduleFamilyId)
     }
 
@@ -559,11 +564,22 @@ class ChatViewModel(
      *   suggested question. When null, no module is anchored. The resolved value (or null)
      *   is injected into the prompt by [ChatSession.buildPrompt].
      */
+    /** GA `source` for the next [sendMessage]: set by [sendSuggestion], else typed. */
+    private var gaNextAskSource: String? = null
+
     fun sendMessage(text: String, moduleFamilyId: String? = null) {
+        val gaSource = gaNextAskSource ?: CoachingValues.TYPED
+        gaNextAskSource = null
         val trimmed = text.trim()
         if (trimmed.isBlank()) return
         val readyState = _uiState.value as? ChatUiState.Ready ?: return
         if (readyState.isGenerating) return
+        // GA: that a question was asked and how — never the question text.
+        CoachingAnalytics.event(
+            CoachingEvents.CHAT_ASKED,
+            CoachingParams.SOURCE to gaSource,
+            CoachingParams.IS_ONLINE to sdk.isNetworkAvailable(),
+        )
 
         inferenceJob?.cancel()
         // Stash the in-flight question so serve* helpers / payload builders can

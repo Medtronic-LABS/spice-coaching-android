@@ -1,5 +1,9 @@
 package com.medtroniclabs.microcoaching.ui.document
 
+import com.medtroniclabs.microcoaching.analytics.CoachingAnalytics
+import com.medtroniclabs.microcoaching.analytics.CoachingEvents
+import com.medtroniclabs.microcoaching.analytics.CoachingParams
+import com.medtroniclabs.microcoaching.analytics.CoachingValues
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
@@ -228,6 +232,11 @@ class DocumentPreviewActivity : ComponentActivity() {
                 )
             }.onFailure { Log.w(TAG, "Failed to record document_viewed: ${it.message}") }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        CoachingAnalytics.screen(CoachingValues.SCREEN_DOCUMENT_PREVIEW)
     }
 
     override fun onDestroy() {

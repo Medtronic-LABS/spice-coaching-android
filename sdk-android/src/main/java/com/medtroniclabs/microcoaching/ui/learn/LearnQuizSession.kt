@@ -4,6 +4,10 @@ import android.util.Log
 import androidx.lifecycle.viewModelScope
 import com.medtroniclabs.microcoaching.MicroCoachingSDK
 import com.medtroniclabs.microcoaching.R
+import com.medtroniclabs.microcoaching.analytics.CoachingAnalytics
+import com.medtroniclabs.microcoaching.analytics.CoachingEvents
+import com.medtroniclabs.microcoaching.analytics.CoachingParams
+import com.medtroniclabs.microcoaching.analytics.CoachingValues
 import com.medtroniclabs.microcoaching.domain.telemetry.triggerTypeFor
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -269,6 +273,8 @@ internal fun LearnViewModel.finishQuiz(deferSync: Boolean = false) {
     // Legacy flat mode always shows the result screen.
     if (isInSequenceMode) {
         if (!passed) {
+            // GA: a failed attempt ends here (the SK replays the card).
+            gaQuizCompleted(module, correctCount, state.questions.size, scorePercent, passed = false)
             retryCourse()
             return
         }
@@ -301,6 +307,8 @@ internal fun LearnViewModel.finishQuiz(deferSync: Boolean = false) {
         questionsAttempted = finalTotal,
         correctAnswers = finalCorrect,
     )
+
+    gaQuizCompleted(module, finalCorrect, finalTotal, finalScore, finalPassed)
 
     _uiState.value = LearnUiState.QuizResult(
         scorePercent = finalScore,
@@ -346,4 +354,32 @@ internal fun LearnViewModel.finishQuiz(deferSync: Boolean = false) {
             sdk.syncCoordinator.triggerNow()
         }
     }
+}
+
+/**
+ * GA `coaching_quiz_completed` — one per finished attempt (the SDK's own
+ * telemetry records per question only). Scores and counts, never answers.
+ */
+private fun LearnViewModel.gaQuizCompleted(
+    module: LearnModule,
+    correct: Int,
+    total: Int,
+    scorePct: Int,
+    passed: Boolean,
+) {
+    CoachingAnalytics.event(
+        CoachingEvents.QUIZ_COMPLETED,
+        CoachingParams.MODULE_ID to module.moduleId,
+        CoachingParams.MODULE_FAMILY_ID to module.moduleFamilyId,
+        CoachingParams.CLINICAL_DOMAIN to module.clinicalDomain,
+        CoachingParams.SOURCE to when {
+            startedViaRefresher -> CoachingValues.REFRESHER
+            startedViaCourse -> CoachingValues.COURSE
+            else -> CoachingValues.LIBRARY
+        },
+        CoachingParams.SCORE_PCT to scorePct,
+        CoachingParams.CORRECT to correct,
+        CoachingParams.QUESTIONS to total,
+        CoachingParams.RESULT to if (passed) CoachingValues.PASSED else CoachingValues.FAILED,
+    )
 }
