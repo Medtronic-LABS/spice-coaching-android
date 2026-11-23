@@ -1,5 +1,9 @@
 package com.medtroniclabs.microcoaching.ui.video
 
+import com.medtroniclabs.microcoaching.analytics.CoachingAnalytics
+import com.medtroniclabs.microcoaching.analytics.CoachingEvents
+import com.medtroniclabs.microcoaching.analytics.CoachingParams
+import com.medtroniclabs.microcoaching.analytics.CoachingValues
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -86,6 +90,17 @@ class VideoPlayerActivity : ComponentActivity() {
 
     /** Non-null in training mode — turns player callbacks into progress + telemetry. */
     private var reporter: VideoProgressReporter? = null
+    private var gaStartSent = false
+
+    override fun onResume() {
+        super.onResume()
+        CoachingAnalytics.screen(CoachingValues.SCREEN_VIDEO_PLAYER)
+    }
+
+    override fun onDestroy() {
+        if (isFinishing) reporter?.onSessionEnd()
+        super.onDestroy()
+    }
 
     /** The assigned video's `source_document_id` (== AssetCache key), training mode only. */
     private var videoId: String? = null
@@ -182,6 +197,14 @@ class VideoPlayerActivity : ComponentActivity() {
      */
     private fun initTrainingMode(videoId: String) {
         val sdk = MicroCoachingSDK.getInstance()
+        if (!gaStartSent) {
+            gaStartSent = true
+            CoachingAnalytics.event(
+                CoachingEvents.VIDEO_STARTED,
+                CoachingParams.VIDEO_ID to videoId,
+                CoachingParams.IS_ONLINE to sdk.isNetworkAvailable(),
+            )
+        }
         val chwId = sdk.currentCHWId
         if (!chwId.isNullOrBlank()) {
             reporter = VideoProgressReporter(

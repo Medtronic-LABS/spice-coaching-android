@@ -3,6 +3,10 @@ package com.medtroniclabs.microcoaching.domain.telemetry
 import android.util.Log
 import com.medtroniclabs.microcoaching.BuildConfig
 import com.medtroniclabs.microcoaching.MicroCoachingSDK
+import com.medtroniclabs.microcoaching.analytics.CoachingAnalytics
+import com.medtroniclabs.microcoaching.analytics.CoachingEvents
+import com.medtroniclabs.microcoaching.analytics.CoachingParams
+import com.medtroniclabs.microcoaching.analytics.CoachingValues
 import com.medtroniclabs.microcoaching.data.db.dao.CoachingEventDao
 import com.medtroniclabs.microcoaching.data.db.entity.CoachingEventEntity
 import kotlinx.serialization.json.Json
@@ -263,6 +267,16 @@ class EventRecorder(
                 moduleId = moduleId,
             )
         )
+        // GA: answer outcome only — refusal detail in payloadJson is never sent.
+        CoachingAnalytics.event(
+            CoachingEvents.CHAT_ANSWERED,
+            CoachingParams.RESULT to if (payloadJson != null) CoachingValues.REFUSED else CoachingValues.SUCCESS,
+            CoachingParams.INFERENCE_MODE to inferenceMode,
+            CoachingParams.VALIDATOR_STATUS to validatorStatus,
+            CoachingParams.FALLBACK_USED to fallbackUsed,
+            CoachingParams.MODULE_ID to moduleId,
+            CoachingParams.IS_ONLINE to CoachingAnalytics.isOnline(networkState),
+        )
         Log.d(TAG, "[$sessionId] digital_help_used saved — module=$moduleId mode=$inferenceMode validator=$validatorStatus fallback=$fallbackUsed network=$networkState")
     }
 
@@ -316,6 +330,14 @@ class EventRecorder(
                 payloadJson = buildChatResponsePayload(responseJson, feedbackText, question),
                 moduleId = moduleId,
             )
+        )
+        // GA: the vote only — question, answer and typed feedback are never sent.
+        CoachingAnalytics.event(
+            CoachingEvents.CHAT_FEEDBACK,
+            CoachingParams.VOTE to if (positive) CoachingValues.UP else CoachingValues.DOWN,
+            CoachingParams.HAS_COMMENT to !feedbackText.isNullOrBlank(),
+            CoachingParams.INFERENCE_MODE to inferenceMode,
+            CoachingParams.MODULE_ID to moduleId,
         )
         Log.d(TAG, "[$sessionId] $eventType saved — module=$moduleId mode=$inferenceMode network=$networkState hasFeedback=${!feedbackText.isNullOrBlank()}")
     }
@@ -396,6 +418,15 @@ class EventRecorder(
                 networkState = networkState,
                 payloadJson = payload,
             ),
+        )
+        // GA: request type only — the suggested name and reason (free text) are never sent.
+        CoachingAnalytics.event(
+            CoachingEvents.MODULE_REQUESTED,
+            CoachingParams.REQUEST_TYPE to
+                if (moduleId != null || moduleFamilyId != null) CoachingValues.EXISTING_MODULE else CoachingValues.NEW_TOPIC,
+            CoachingParams.MODULE_ID to moduleId,
+            CoachingParams.HAS_REASON to !reason.isNullOrBlank(),
+            CoachingParams.IS_ONLINE to CoachingAnalytics.isOnline(networkState),
         )
         Log.d(TAG, "[$sessionId] module_requested saved — moduleId=$moduleId name=$requestedModuleName")
     }
@@ -488,6 +519,13 @@ class EventRecorder(
                 networkState = networkState,
                 payloadJson = payload,
             ),
+        )
+        CoachingAnalytics.event(
+            CoachingEvents.DOCUMENT_VIEWED,
+            CoachingParams.DOCUMENT_ID to sourceDocumentId,
+            CoachingParams.TIME_SPENT_MS to timeSpentMs,
+            CoachingParams.DOWNLOADED to downloaded,
+            CoachingParams.IS_ONLINE to CoachingAnalytics.isOnline(networkState),
         )
         Log.d(TAG, "[$sessionId] document_viewed saved — document=$sourceDocumentId network=$networkState")
     }
@@ -632,6 +670,23 @@ class EventRecorder(
                     behaviouralGapId = behaviouralGapId,
                 ),
             )
+            // GA: module opened / quiz started. Per-card and per-question rows
+            // stay coaching-backend only (quiz totals go out at finishQuiz).
+            val gaEvent = when (eventType) {
+                "module_delivered" -> CoachingEvents.MODULE_OPENED
+                "module_quiz_viewed" -> CoachingEvents.QUIZ_STARTED
+                else -> null
+            }
+            if (gaEvent != null) {
+                CoachingAnalytics.event(
+                    gaEvent,
+                    CoachingParams.MODULE_ID to moduleId,
+                    CoachingParams.MODULE_FAMILY_ID to moduleFamilyId,
+                    CoachingParams.MODULE_VERSION to moduleVersion,
+                    CoachingParams.CLINICAL_DOMAIN to clinicalDomain,
+                    CoachingParams.IS_ONLINE to CoachingAnalytics.isOnline(resolvedNetworkState),
+                )
+            }
         } catch (e: Exception) {
             Log.w(TAG, "Failed to record event '$eventType': ${e.message}")
         }

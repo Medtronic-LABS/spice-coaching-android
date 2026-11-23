@@ -180,6 +180,13 @@ dependencies {
     // Coroutines
     implementation(libs.kotlinx.coroutines.android)
 
+    // ── Optional GA (Google Analytics for Firebase) ──────────────────────────
+    // compileOnly: the SDK compiles against Firebase but never ships it. A host
+    // that wants coaching analytics already has firebase-analytics (and its own
+    // google-services.json); a host without it gets a silent no-op — see
+    // analytics/CoachingAnalytics.kt. Only FirebaseAnalyticsSink references it.
+    compileOnly("com.google.firebase:firebase-analytics:22.1.2")
+
     // Testing
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

@@ -1,5 +1,9 @@
 package com.medtroniclabs.microcoaching.ai.model
 
+import com.medtroniclabs.microcoaching.analytics.CoachingAnalytics
+import com.medtroniclabs.microcoaching.analytics.CoachingEvents
+import com.medtroniclabs.microcoaching.analytics.CoachingParams
+import com.medtroniclabs.microcoaching.analytics.CoachingValues
 import android.content.Context
 import android.content.pm.ServiceInfo
 import android.net.ConnectivityManager
@@ -54,6 +58,19 @@ class ModelDownloadWorker(
     override suspend fun getForegroundInfo(): ForegroundInfo =
         buildForegroundInfo(progress = 0, bytesDownloaded = 0L, totalBytes = 0L)
 
+    private val gaStartedAtMs = System.currentTimeMillis()
+
+    /** GA `coaching_model_download` — outcome only, never URLs or error text. */
+    private fun gaModelDownload(modelId: String, result: String, failureReason: String?) {
+        CoachingAnalytics.event(
+            CoachingEvents.MODEL_DOWNLOAD,
+            CoachingParams.MODEL_ID to modelId,
+            CoachingParams.RESULT to result,
+            CoachingParams.FAILURE_REASON to failureReason,
+            CoachingParams.DURATION_MS to System.currentTimeMillis() - gaStartedAtMs,
+        )
+    }
+
     override suspend fun doWork(): Result {
         // Promote to foreground service before any I/O so the OS keeps us alive
         // when the host app is backgrounded or killed. If POST_NOTIFICATIONS was
@@ -80,6 +97,7 @@ class ModelDownloadWorker(
         val outputDir = applicationContext.getExternalFilesDir(null)
             ?: run {
                 Log.e(TAG, "External storage unavailable — failing")
+                gaModelDownload(variant.id, CoachingValues.FAILED, CoachingValues.STORAGE_UNAVAILABLE)
                 return Result.failure(workDataOf(KEY_ERROR to "External storage unavailable"))
             }
 
@@ -116,6 +134,7 @@ class ModelDownloadWorker(
                         .putBoolean(KEY_MODEL_READY, true)
                         .putString(KEY_MODEL_PATH, outcome.file.absolutePath)
                         .apply()
+                    gaModelDownload(variant.id, CoachingValues.SUCCESS, null)
                     return Result.success(
                         workDataOf(
                             KEY_PROGRESS to 100,
@@ -133,6 +152,7 @@ class ModelDownloadWorker(
 
         val combinedError = errors.joinToString(" | ")
         Log.e(TAG, "All providers failed: $combinedError")
+        gaModelDownload(variant.id, CoachingValues.FAILED, CoachingValues.DOWNLOAD_FAILED)
         return Result.failure(workDataOf(KEY_ERROR to combinedError))
     }
 

@@ -1234,6 +1234,7 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
         private var enableApplyModule: Boolean = false
         private var enableMeasureModule: Boolean = false
         private var dataCallback: MicroCoachingDataCallback? = null
+        private var enableAnalytics: Boolean = false
         private var uiTheme: CoachingUiTheme = CoachingUiTheme.SYSTEM
         private var themeColors: CoachingColors = CoachingColors.Spice
         private var themeTypography: Typography = coachingTypography()
@@ -1346,6 +1347,12 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
         fun enableMeasureModule(enabled: Boolean) = apply { enableMeasureModule = enabled }
         fun dataCallback(callback: MicroCoachingDataCallback) = apply { dataCallback = callback }
         /**
+         * Opt in to Google Analytics for the coaching flow, using the host app's
+         * own Firebase project. Off by default; a no-op when the host has no
+         * Firebase. See [com.medtroniclabs.microcoaching.analytics.CoachingAnalytics].
+         */
+        fun enableAnalytics(enabled: Boolean) = apply { enableAnalytics = enabled }
+        /**
          * Restyle SDK-owned screens.
          *
          * Override only what you need — everything else stays at the SPICE default:
@@ -1449,6 +1456,7 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
                 enableApplyModule = enableApplyModule,
                 enableMeasureModule = enableMeasureModule,
                 dataCallback = dataCallback,
+                enableAnalytics = enableAnalytics,
                 themeColors = themeColors,
                 themeTypography = themeTypography,
                 uiTheme = uiTheme,
@@ -1483,6 +1491,10 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
                         offlineEngineFactory = offlineFactory,
                     )
                 } else null
+
+            // Optional GA — never throws; silently off when the host has no Firebase.
+            com.medtroniclabs.microcoaching.analytics.CoachingAnalytics
+                .init(config.context, config.enableAnalytics)
 
             Log.i(TAG, "SDK initialized — backendUrl=${config.backendUrl.isNotBlank()} " +
                 "modelPath=${config.modelPath.isNotBlank()} " +

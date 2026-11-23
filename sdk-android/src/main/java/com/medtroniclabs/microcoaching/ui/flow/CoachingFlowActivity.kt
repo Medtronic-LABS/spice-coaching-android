@@ -6,10 +6,13 @@ import android.os.Bundle
 import android.util.Log
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.platform.LocalContext
 import androidx.fragment.app.FragmentActivity
+import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
 import com.medtroniclabs.microcoaching.MicroCoachingSDK
+import com.medtroniclabs.microcoaching.analytics.CoachingAnalytics
 import com.medtroniclabs.microcoaching.ui.SdkLocaleHelper
 import com.medtroniclabs.microcoaching.ui.common.applyCoachingStatusBar
 import com.medtroniclabs.microcoaching.ui.theme.resolveConfiguredColors
@@ -50,6 +53,9 @@ class CoachingFlowActivity : FragmentActivity() {
             return
         }
 
+        // GA: one coaching session per fresh open (not on rotation/restore).
+        if (savedInstanceState == null) CoachingAnalytics.sessionStarted()
+
         // Blue status bar to match the SdkScreenHeader across the whole coaching
         // flow (scoped to this SDK-owned window; the host keeps its own styling).
         window.applyCoachingStatusBar(resolveConfiguredColors().primary)
@@ -71,6 +77,15 @@ class CoachingFlowActivity : FragmentActivity() {
             CompositionLocalProvider(LocalContext provides langCtx) {
                 MicroCoachingTheme {
                     val navController = rememberNavController()
+                    // GA screen_view per coaching screen. Only the route template's
+                    // first segment is sent — never ids or dates in route args.
+                    DisposableEffect(navController) {
+                        val listener = NavController.OnDestinationChangedListener { _, destination, _ ->
+                            CoachingAnalytics.screen(CoachingAnalytics.screenNameForRoute(destination.route))
+                        }
+                        navController.addOnDestinationChangedListener(listener)
+                        onDispose { navController.removeOnDestinationChangedListener(listener) }
+                    }
                     CoachingNavGraph(
                         navController = navController,
                         startRoute = startRoute,
@@ -88,6 +103,12 @@ class CoachingFlowActivity : FragmentActivity() {
                 }
             }
         }
+    }
+
+    override fun onDestroy() {
+        // GA: session ends when the SK leaves coaching (not on rotation).
+        if (isFinishing) CoachingAnalytics.sessionEnded()
+        super.onDestroy()
     }
 
     private fun resolveStartRoute(): String {

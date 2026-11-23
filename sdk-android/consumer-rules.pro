@@ -37,3 +37,9 @@
 # Every message is serialised to JSON on its way to JNI, by field name.
 -keep class com.google.gson.** { *; }
 -dontwarn com.google.gson.**
+
+# ── Optional Firebase Analytics (compileOnly) ────────────────────────────────
+# FirebaseAnalyticsSink references Firebase, which a host app may not ship.
+# Without this, R8 in such a host fails the release build on missing classes.
+# The class is only loaded after a runtime check (CoachingAnalytics.init).
+-dontwarn com.google.firebase.**

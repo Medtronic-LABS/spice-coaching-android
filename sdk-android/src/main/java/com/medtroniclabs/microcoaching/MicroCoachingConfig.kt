@@ -318,6 +318,15 @@ data class MicroCoachingConfig internal constructor(
      */
     val dataCallback: MicroCoachingDataCallback? = null,
 
+    /**
+     * Send coaching usage events to Google Analytics for Firebase through the
+     * HOST app's Firebase project (no keys in the SDK). Off by default. When true
+     * but the host has no firebase-analytics, or Firebase is not configured,
+     * analytics is silently disabled — coaching is never affected.
+     * See [com.medtroniclabs.microcoaching.analytics.CoachingAnalytics].
+     */
+    val enableAnalytics: Boolean = false,
+
     // ── Testing / Override ────────────────────────────────────────────────────
     /**
      * When set, [ModeSelector] bypasses all dynamic checks and always returns this mode.

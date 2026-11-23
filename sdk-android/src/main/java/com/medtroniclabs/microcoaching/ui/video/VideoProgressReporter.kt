@@ -1,5 +1,9 @@
 package com.medtroniclabs.microcoaching.ui.video
 
+import com.medtroniclabs.microcoaching.analytics.CoachingAnalytics
+import com.medtroniclabs.microcoaching.analytics.CoachingEvents
+import com.medtroniclabs.microcoaching.analytics.CoachingParams
+import com.medtroniclabs.microcoaching.analytics.CoachingValues
 import android.util.Log
 import com.medtroniclabs.microcoaching.MicroCoachingSDK
 import com.medtroniclabs.microcoaching.data.db.entity.LearningCompletionEntity
@@ -65,6 +69,7 @@ internal class VideoProgressReporter(
         if (completedEmitted) return
         completedEmitted = true
         val dur = durationMs.coerceAtLeast(0L)
+        gaVideoEnded(percent = 100.0, completed = true, watchMs = if (dur > 0L) dur else maxPositionMs)
         scope.launch(Dispatchers.IO) {
             runCatching { dao.updateProgress(videoId, chwId, dur, 100.0, completed = true, watchedAt = nowIso()) }
                 .onFailure { Log.w(TAG, "completed DB update failed: ${it.message}") }
@@ -89,11 +94,33 @@ internal class VideoProgressReporter(
         }
     }
 
+    /** GA: one `coaching_video_ended` per player session. */
+    private var gaEndedSent = false
+    private var gaLastPercent = 0.0
+
+    private fun gaVideoEnded(percent: Double, completed: Boolean, watchMs: Long) {
+        if (gaEndedSent) return
+        gaEndedSent = true
+        CoachingAnalytics.event(
+            CoachingEvents.VIDEO_ENDED,
+            CoachingParams.VIDEO_ID to videoId,
+            CoachingParams.PERCENT_WATCHED to kotlin.math.round(percent).toLong(),
+            CoachingParams.COMPLETED to completed,
+            CoachingParams.WATCH_MS to watchMs,
+            CoachingParams.PAUSE_COUNT to pauseCount,
+            CoachingParams.REWATCH_COUNT to rewatchCount,
+        )
+    }
+
+    /** Player screen closed — sends `coaching_video_ended` if not already sent. */
+    fun onSessionEnd() = gaVideoEnded(gaLastPercent, completed = false, watchMs = maxPositionMs)
+
     private fun handle(positionMs: Long, durationMs: Long, force: Boolean) {
         if (completedEmitted) return
         val pos = positionMs.coerceAtLeast(0L)
         val dur = durationMs.coerceAtLeast(0L)
         val percent = if (dur > 0L) (pos.toDouble() / dur * 100.0).coerceIn(0.0, 100.0) else 0.0
+        if (percent > gaLastPercent) gaLastPercent = percent
 
         // Session-behaviour tracking. A jump backward past the threshold is a
         // rewatch/scrub-back; maxPositionMs is the furthest watched (drop-off +
