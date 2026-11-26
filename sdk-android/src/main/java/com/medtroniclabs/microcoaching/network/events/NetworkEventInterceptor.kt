@@ -1,5 +1,6 @@
 package com.medtroniclabs.microcoaching.network.events
 
+import androidx.annotation.VisibleForTesting
 import okhttp3.Call
 import okhttp3.Interceptor
 import okhttp3.Request
@@ -26,7 +27,8 @@ internal class NetworkEventInterceptor(
 
     private val dropped = AtomicLong()
 
-    /** Rows lost because reading the clock, building or offering them threw. */
+    /** Rows lost because reading the clock, building or offering them threw. Read by tests only. */
+    @VisibleForTesting
     val droppedCount: Long get() = dropped.get()
 
     override fun intercept(chain: Interceptor.Chain): Response {

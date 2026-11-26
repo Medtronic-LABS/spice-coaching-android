@@ -11,8 +11,9 @@ import kotlinx.coroutines.ensureActive
  * The logic behind `MicroCoachingSDK.getNetworkEvents` and `clearNetworkEvents`
  * (spec §7e, §7h). Neither call throws: an unbound store maps to
  * [NetworkEventsStatus.NOT_INITIALIZED] and any other [Exception] from the store
- * to [NetworkEventsStatus.STORE_ERROR]. Only the caller's own cancellation and
- * [Error]s propagate. The store does its I/O on its own (IO) dispatcher.
+ * or [LinkageError] (a class failing to link while the store opens) to
+ * [NetworkEventsStatus.STORE_ERROR]. Only the caller's own cancellation and
+ * other [Error]s propagate. The store does its I/O on its own (IO) dispatcher.
  */
 internal class NetworkEventsReader(
     private val isSdkInitialized: () -> Boolean,
@@ -30,6 +31,8 @@ internal class NetworkEventsReader(
             return STORE_ERROR
         } catch (e: Exception) {
             return STORE_ERROR
+        } catch (e: LinkageError) {
+            return STORE_ERROR
         }
         return NetworkEventsResult(NetworkEventsStatus.OK, page.rows.map { it.toNetworkEvent() }, page.maxId)
     }
@@ -43,6 +46,8 @@ internal class NetworkEventsReader(
         currentCoroutineContext().ensureActive()
         CLEAR_STORE_ERROR
     } catch (e: Exception) {
+        CLEAR_STORE_ERROR
+    } catch (e: LinkageError) {
         CLEAR_STORE_ERROR
     }
 

@@ -60,7 +60,11 @@ internal object NetworkEventRecorder : NetworkEventSink, NetworkEventLog {
 
     private fun openRoomStore(context: Context) = NetworkEventStore.of(MicroCoachingDatabase.getInstance(context))
 
-    /** Rows lost process-wide: queue overflow, offered while unbound, or a failed write. */
+    /**
+     * Rows lost process-wide: queue overflow, offered while unbound, or a failed write.
+     * Read by tests only; production surfaces a failed write through the once-per-type log.
+     */
+    @VisibleForTesting
     val droppedCount: Long get() = dropped.get()
 
     /** Bumped by every [clear]; rows whose request started under an older epoch are discarded at write. */
@@ -79,7 +83,8 @@ internal object NetworkEventRecorder : NetworkEventSink, NetworkEventLog {
         }
     }
 
-    /** This recorder once bound, else null. */
+    /** This recorder once bound, else null. Production reads it through [NetworkEventSinkHolder]. */
+    @VisibleForTesting
     fun current(): NetworkEventSink? = if (writer != null) this else null
 
     override fun offer(event: NetworkEventRow) {

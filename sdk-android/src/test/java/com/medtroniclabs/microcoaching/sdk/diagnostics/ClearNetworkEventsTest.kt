@@ -183,10 +183,10 @@ class ClearNetworkEventsTest {
 
     @Test
     fun clear_storeErrorIsStoreErrorAndNeverThrows() = runBlocking {
-        val failures = ArrayDeque(listOf(SQLiteException("disk"), IllegalStateException("closed"), RuntimeException("odd")))
+        val failures = ArrayDeque(listOf(SQLiteException("disk"), IllegalStateException("closed"), RuntimeException("odd"), NoClassDefFoundError("sqlite")))
         fixture.bind(store = { NetworkEventStore(fixture.dao) { _ -> throw failures.removeFirst() } })
 
-        repeat(3) {
+        repeat(4) {
             assertEquals(NetworkEventsClearResult(NetworkEventsStatus.STORE_ERROR, 0), reader.clear())
         }
     }

@@ -71,7 +71,7 @@ val cleared = MicroCoachingSDK.clearNetworkEvents()
 These are `suspend` functions on the `MicroCoachingSDK` companion (result types are in `com.medtroniclabs.microcoaching.sdk.diagnostics`). Java hosts must go through `MicroCoachingSDK.Companion` and pass a `Continuation`.
 
 - **Paging.** Rows come back in ascending id order. Pass the last id you saw as `afterId`; `limit` is clamped to 1..500. `maxId` is the highest stored id (0 when empty); if it is lower than your cursor, the table was cleared, so restart from 0.
-- **Status.** `OK`, `NOT_INITIALIZED` (SDK not initialised or recorder not bound; empty list), `STORE_ERROR` (read failed; map it to an error in your layer). Neither call throws.
+- **Status.** `OK`, `NOT_INITIALIZED` (`getNetworkEvents`: SDK not initialised or recorder not bound, empty list; `clearNetworkEvents`: only when the recorder is not bound, since it works before the SDK is initialised), `STORE_ERROR` (read failed; map it to an error in your layer). Neither call throws.
 - **Clear.** `clearNetworkEvents()` deletes all rows and returns `clearedThroughId`. Call it when the user is wiped; the SDK does not do it itself.
 - **Timeouts.** The calls queue behind the writer's lock, so wrap them in `withTimeout` and treat a timeout as "try again later".
 

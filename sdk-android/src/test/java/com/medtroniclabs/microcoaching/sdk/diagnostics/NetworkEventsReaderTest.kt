@@ -140,11 +140,16 @@ class NetworkEventsReaderTest {
     @Test
     fun storeErrors_areStoreErrorAndNeverThrow() = runBlocking {
         val failures = ArrayDeque(
-            listOf(SQLiteException("disk"), IllegalStateException("closed"), IllegalArgumentException("odd")),
+            listOf(
+                SQLiteException("disk"),
+                IllegalStateException("closed"),
+                IllegalArgumentException("odd"),
+                NoClassDefFoundError("sqlite"),
+            ),
         )
         fixture.bind(store = { NetworkEventStore(fixture.dao) { _ -> throw failures.removeFirst() } })
 
-        repeat(3) {
+        repeat(4) {
             val result = reader.read(afterId = 0, limit = 10)
             assertEquals(NetworkEventsStatus.STORE_ERROR, result.status)
             assertEquals(emptyList<NetworkEvent>(), result.events)
