@@ -1,8 +1,8 @@
 package com.medtroniclabs.microcoaching.ai.download
 
 import android.util.Log
-import com.medtroniclabs.microcoaching.BuildConfig
 import com.medtroniclabs.microcoaching.network.events.NetworkEvents
+import com.medtroniclabs.microcoaching.network.events.UrlSanitizer
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
@@ -119,7 +119,7 @@ internal object ResumableHttpDownloader {
         // Always close the response to avoid OkHttp connection leaks on early returns.
         response.use { resp ->
             val isPartialContent = resp.code == 206
-            Log.d(logTag, "streamDownload → HTTP ${resp.code} ${resp.message} | url=$url")
+            Log.d(logTag, "streamDownload → HTTP ${resp.code} | ${UrlSanitizer.sanitize(url)}")
 
             if (resp.code == 416) {
                 // Range not satisfiable — the server rejected our resume offset. A local file
@@ -145,12 +145,7 @@ internal object ResumableHttpDownloader {
             }
 
             if (!resp.isSuccessful && !isPartialContent) {
-                if (BuildConfig.DEBUG) {
-                    val errorBody = resp.body?.string()?.take(500) ?: "<no body>"
-                    Log.e(logTag, "streamDownload failed | HTTP ${resp.code} | body=$errorBody | headers=${resp.headers}")
-                } else {
-                    Log.e(logTag, "streamDownload failed | HTTP ${resp.code}: ${resp.message}")
-                }
+                Log.e(logTag, "streamDownload failed | HTTP ${resp.code} | ${UrlSanitizer.sanitize(url)}")
                 return@runCatching DownloadResult.Failure("HTTP ${resp.code}: ${resp.message}")
             }
 
@@ -263,7 +258,7 @@ internal object ResumableHttpDownloader {
             DownloadResult.Success
         }
     }.getOrElse { cause ->
-        Log.e(logTag, "streamDownload error for $url: ${cause.message}")
+        Log.e(logTag, "streamDownload error for ${UrlSanitizer.sanitize(url)}: ${cause::class.java.simpleName}")
         DownloadResult.Failure(cause.message ?: "Unknown error")
     }
 }

@@ -2,6 +2,7 @@ package com.medtroniclabs.microcoaching.network
 
 import android.util.Log
 import com.medtroniclabs.microcoaching.MicroCoachingSDK
+import com.medtroniclabs.microcoaching.network.events.UrlSanitizer
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -42,7 +43,7 @@ object MediaUrlResolver {
      */
     suspend fun resolve(src: String?, objectName: String?, forceFresh: Boolean = false): String? {
         if (!src.isNullOrBlank()) {
-            Log.d(TAG, "resolve: using direct src=$src")
+            Log.d(TAG, "resolve: using direct src ${UrlSanitizer.sanitize(src)}")
             return src
         }
         val key = objectName?.takeIf { it.isNotBlank() }
@@ -55,7 +56,7 @@ object MediaUrlResolver {
             mutex.withLock { cache[key] }
                 ?.takeIf { it.expiresAtEpochSec > nowEpochSec() }
                 ?.let {
-                    Log.d(TAG, "resolve: cache hit object_name=$key → ${it.url}")
+                    Log.d(TAG, "resolve: cache hit object_name=$key")
                     return it.url
                 }
         }
@@ -75,7 +76,7 @@ object MediaUrlResolver {
             if (!response.isSuccessful) {
                 Log.w(
                     TAG,
-                    "Media presign failed: code=${response.code()} body=${response.errorBody()?.string()}",
+                    "Media presign failed: code=${response.code()}",
                 )
                 return@runCatching null
             }
@@ -93,7 +94,7 @@ object MediaUrlResolver {
                 url = entry.presignedUrl,
                 expiresAtEpochSec = nowEpochSec() + (entry.expiresSeconds - EXPIRY_SAFETY_MARGIN_SEC).coerceAtLeast(0),
             )
-        }.onFailure { Log.w(TAG, "Media presign error for $key: ${it.message}", it) }.getOrNull()
+        }.onFailure { Log.w(TAG, "Media presign error for $key: ${it::class.java.simpleName}") }.getOrNull()
             ?: return null
 
         mutex.withLock { cache[key] = resolved }
@@ -122,7 +123,7 @@ object MediaUrlResolver {
         mutex.withLock { cache[key] }
             ?.takeIf { it.expiresAtEpochSec > nowEpochSec() }
             ?.let {
-                Log.d(TAG, "resolveSourceDocument: cache hit id=$id → ${it.url}")
+                Log.d(TAG, "resolveSourceDocument: cache hit id=$id")
                 return it.url
             }
 

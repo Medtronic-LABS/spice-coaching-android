@@ -10,6 +10,7 @@ import com.medtroniclabs.microcoaching.MicroCoachingSDK
 import com.medtroniclabs.microcoaching.data.db.dao.CachedAssetDao
 import com.medtroniclabs.microcoaching.data.db.entity.CachedAssetEntity
 import com.medtroniclabs.microcoaching.network.events.NetworkEvents
+import com.medtroniclabs.microcoaching.network.events.UrlSanitizer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -140,13 +141,13 @@ class AssetCache(
                 return null
             }
             val url = runCatching { fetchUrl() }
-                .onFailure { Log.w(TAG, "fetchUrl threw for key=$key: ${it.message}", it) }
+                .onFailure { Log.w(TAG, "fetchUrl threw for key=$key: ${it::class.java.simpleName}") }
                 .getOrNull()
             if (url.isNullOrBlank()) {
                 Log.w(TAG, "no URL resolved for key=$key — cannot cache (fetchUrl returned null/blank)")
                 return null
             }
-            Log.d(TAG, "resolved url for key=$key host=${url.toHttpUrlOrNull()?.host} path=${url.toHttpUrlOrNull()?.encodedPath}")
+            Log.d(TAG, "resolved url for key=$key url=${UrlSanitizer.sanitize(url)}")
             downloadAndStore(keyHash, key, kind, url, onProgress)?.let { return it }
 
             // The download failed on a URL something was willing to hand us, which
@@ -155,7 +156,7 @@ class AssetCache(
             // so a stale URL self-heals instead of leaving a permanent blank.
             val renewed = renewUrl?.let { renew ->
                 runCatching { renew() }
-                    .onFailure { Log.w(TAG, "renewUrl threw for key=$key: ${it.message}", it) }
+                    .onFailure { Log.w(TAG, "renewUrl threw for key=$key: ${it::class.java.simpleName}") }
                     .getOrNull()
             }
             if (renewed.isNullOrBlank() || renewed == url) {
@@ -224,7 +225,7 @@ class AssetCache(
             fetchUrl = fetchUrl,
         ) ?: return null
         runCatching { dao.setPinned(sha256(key), true) }
-            .onFailure { Log.w(TAG, "pin failed for key=$key: ${it.message}") }
+            .onFailure { Log.w(TAG, "pin failed for key=$key: ${it::class.java.simpleName}") }
         return file
     }
 
@@ -278,8 +279,7 @@ class AssetCache(
                 if (!response.isSuccessful) {
                     Log.w(
                         TAG,
-                        "download failed code=${response.code} key=$key " +
-                            "body=${response.body?.string()?.take(200)}",
+                        "download failed code=${response.code} key=$key",
                     )
                     return@withContext null
                 }
@@ -325,14 +325,14 @@ class AssetCache(
                 Log.w(TAG, "insufficient storage for key=$key — cannot cache asset")
                 throw InsufficientStorageException(e)
             }
-            Log.w(TAG, "download IO error for key=$key: ${e.message}", e)
+            Log.w(TAG, "download IO error for key=$key: ${e::class.java.simpleName}")
             null
         } catch (e: Exception) {
             runCatching { tmp.delete() }
             // Propagate the proactive free-space refusal so callers can show the
             // storage-specific message (it isn't an IOException, so it lands here).
             if (e is InsufficientStorageException) throw e
-            Log.w(TAG, "download error for key=$key: ${e.message}", e)
+            Log.w(TAG, "download error for key=$key: ${e::class.java.simpleName}")
             null
         }
     }
