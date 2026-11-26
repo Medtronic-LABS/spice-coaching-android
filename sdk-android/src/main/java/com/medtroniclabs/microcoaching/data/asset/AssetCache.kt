@@ -1,6 +1,5 @@
 package com.medtroniclabs.microcoaching.data.asset
 
-import com.medtroniclabs.microcoaching.network.events.LogRef
 import android.content.Context
 import android.os.StatFs
 import android.system.ErrnoException
@@ -10,6 +9,7 @@ import androidx.annotation.VisibleForTesting
 import com.medtroniclabs.microcoaching.MicroCoachingSDK
 import com.medtroniclabs.microcoaching.data.db.dao.CachedAssetDao
 import com.medtroniclabs.microcoaching.data.db.entity.CachedAssetEntity
+import com.medtroniclabs.microcoaching.network.events.LogRef
 import com.medtroniclabs.microcoaching.network.events.NetworkEvents
 import com.medtroniclabs.microcoaching.network.events.UrlSanitizer
 import kotlinx.coroutines.CoroutineScope

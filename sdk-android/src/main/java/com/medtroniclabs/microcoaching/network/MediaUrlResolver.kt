@@ -1,8 +1,8 @@
 package com.medtroniclabs.microcoaching.network
 
-import com.medtroniclabs.microcoaching.network.events.LogRef
 import android.util.Log
 import com.medtroniclabs.microcoaching.MicroCoachingSDK
+import com.medtroniclabs.microcoaching.network.events.LogRef
 import com.medtroniclabs.microcoaching.network.events.UrlSanitizer
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
