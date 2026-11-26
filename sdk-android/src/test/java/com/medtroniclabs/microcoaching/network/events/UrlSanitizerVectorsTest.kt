@@ -68,13 +68,85 @@ class UrlSanitizerVectorsTest {
     }
 
     @Test
-    fun `random garbage never throws and never exceeds the cap`() {
+    fun `random garbage never throws and never exceeds the cap on a small stack`() = onSmallStack(FUZZ_STACK_BYTES) {
         val random = Random(GARBAGE_SEED)
         repeat(GARBAGE_SAMPLES) {
             val input = garbage(random)
             val out = UrlSanitizer.sanitize(input)
             assertTrue("length ${out.length} for input of length ${input.length}", out.length <= OUTPUT_CAP)
         }
+    }
+
+    /** Long escape runs, multi-byte runs and `{`/`{id` tails reach the cap cut without deep recursion. */
+    @Test
+    fun `long runs at the cap are stack-safe on a 128 KB thread`() = onSmallStack(REGRESSION_STACK_BYTES) {
+        listOf(
+            "https://h.test/x/" + "%".repeat(8000),
+            "https://h.test/x/" + "%25".repeat(2700),
+            "https://h.test/" + "%E0%A6%95".repeat(300),
+            "https://h.test/" + "\u0995".repeat(300),
+            "https://h.test/x/" + "{".repeat(8000),
+            "https://h.test/" + "{id/".repeat(2000),
+            "https://h.test/" + "a/{id}/".repeat(1100),
+            "https://h.test/x/" + "1".repeat(8000),
+            "https://h.test/x/" + "a".repeat(8000),
+            "https://h.test/x/" + "\u09E7".repeat(8000),
+        ).forEach { input ->
+            val once = UrlSanitizer.sanitize(input)
+            assertTrue("length ${once.length}", once.length <= OUTPUT_CAP)
+            assertEquals(once, UrlSanitizer.sanitize(once))
+        }
+    }
+
+    @Test
+    fun `Garay digits added in Unicode 16 count as digits`() = assertDigitRange(0x10D40)
+
+    @Test
+    fun `Sunuwar digits added in Unicode 16 count as digits`() = assertDigitRange(0x11BF0)
+
+    @Test
+    fun `Myanmar Pao and Eastern Pwo Karen digits added in Unicode 16 count as digits`() = assertDigitRange(0x116D0)
+
+    @Test
+    fun `Gurung Khema digits added in Unicode 16 count as digits`() = assertDigitRange(0x16130)
+
+    @Test
+    fun `Kirat Rai digits added in Unicode 16 count as digits`() = assertDigitRange(0x16D70)
+
+    @Test
+    fun `outlined digits added in Unicode 16 count as digits`() = assertDigitRange(0x1CCF0)
+
+    @Test
+    fun `Ol Onal digits added in Unicode 16 count as digits`() = assertDigitRange(0x1E5F1)
+
+    /** The table is the whole reference digit set, so it holds on platforms with older Unicode data. */
+    @Test
+    fun `every range of the reference digit table masks six and keeps five`() {
+        UrlSanitizer.DART_DECIMAL_DIGIT_RANGES.toList().chunked(2).forEach { (first, last) ->
+            assertDigitRange(first)
+            assertDigitRange(last - 5)
+        }
+    }
+
+    /** Six consecutive digits from [first] form a masked run; five stay as percent-encoded text. */
+    private fun assertDigitRange(first: Int) {
+        fun digits(count: Int) = (first until first + count).joinToString("") { String(Character.toChars(it)) }
+        val label = "U+%04X".format(first)
+        assertEquals(label, "https://h.test/x/{id}", UrlSanitizer.sanitize("https://h.test/x/${digits(6)}"))
+        assertEquals(
+            label,
+            "https://h.test/x/${DartUriLite.encodeComponent(digits(5))}",
+            UrlSanitizer.sanitize("https://h.test/x/${digits(5)}"),
+        )
+    }
+
+    /** Runs [block] on a thread with [stackBytes] of stack and rethrows anything it throws, Errors included. */
+    private fun onSmallStack(stackBytes: Long, block: () -> Unit) {
+        var failure: Throwable? = null
+        val thread = Thread(null, { failure = runCatching(block).exceptionOrNull() }, "small-stack", stackBytes)
+        thread.start()
+        thread.join()
+        failure?.let { throw it }
     }
 
     @Test
@@ -100,7 +172,7 @@ class UrlSanitizerVectorsTest {
 
     @Test
     fun `supplementary-plane decimal digits count towards a masked run`() {
-        val mathDigits = "𝟘𝟙𝟚𝟛𝟜𝟝"
+        val mathDigits = "\uD835\uDFD8\uD835\uDFD9\uD835\uDFDA\uD835\uDFDB\uD835\uDFDC\uD835\uDFDD"
         assertEquals("https://h.test/x/{id}", UrlSanitizer.sanitize("https://h.test/x/$mathDigits"))
     }
 
@@ -131,7 +203,13 @@ class UrlSanitizerVectorsTest {
         val length = random.nextInt(GARBAGE_MAX_LENGTH + 1)
         val builder = StringBuilder(length + PREFIXES.maxOf { it.length })
         if (random.nextBoolean()) builder.append(PREFIXES[random.nextInt(PREFIXES.size)])
-        while (builder.length < length) builder.append(ALPHABET[random.nextInt(ALPHABET.size)])
+        // A third of the samples repeat one token for thousands of characters, the
+        // shape that reaches the cap cut with a long escape or `{id` run.
+        val runToken = if (random.nextInt(3) == 0) RUN_TOKENS[random.nextInt(RUN_TOKENS.size)] else null
+        while (builder.length < length) {
+            val repeatRun = runToken != null && random.nextInt(RUN_BREAK_ODDS) != 0
+            builder.append(if (repeatRun) runToken else ALPHABET[random.nextInt(ALPHABET.size)])
+        }
         return builder.toString()
     }
 
@@ -151,10 +229,14 @@ class UrlSanitizerVectorsTest {
         const val GARBAGE_SEED = 20261126L
         const val GARBAGE_SAMPLES = 3000
         const val GARBAGE_MAX_LENGTH = 9000
+        const val RUN_BREAK_ODDS = 200
+        const val FUZZ_STACK_BYTES = 256L * 1024
+        const val REGRESSION_STACK_BYTES = 128L * 1024
+        val RUN_TOKENS = listOf("%", "%25", "%EF%BB%BF", "{id", "{", "%E0%A6%95", "%2", "\u0995", "/{id}")
         val PREFIXES = listOf("https://", "http://h.test/", "wss://[", "ws://u@", "HTTPS:\\\\")
         val ALPHABET: List<String> = listOf(
             "%", "%", "0", "7", "a", "F", "e", "@", ";", "\\", "/", "?", "#", "&", "=", "[", "]", ":",
-            "1", "9", "১", "٠", "𝟘", "\uD800", "\uDC00", "﻿", "…", " ",
+            "1", "9", "\u09E7", "\u0660", "\uD835\uDFD8", "\uD800", "\uDC00", "\uFEFF", "\u2026", " ",
             "%2", "%25", "%EF%BB%BF", "%E0%A4", "{id}", "limit=", "x", ".", "..",
         )
     }

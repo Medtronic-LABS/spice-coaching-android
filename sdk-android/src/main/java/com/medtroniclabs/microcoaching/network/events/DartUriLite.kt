@@ -54,7 +54,13 @@ internal class DartUriLite private constructor(
         private const val REPLACEMENT_CHARACTER = 0xFFFD
         private const val BYTE_ORDER_MARK = 0xFEFF
 
-        /** Dart's `_defaultPort`: an explicit port equal to it is dropped. */
+        /**
+         * Dart's `_defaultPort`: an explicit port equal to it is dropped while
+         * parsing, and any other scheme defaults to 0. This is the parser's own
+         * rule, which is why `ws://h:0` has no port. It is not the sanitiser's
+         * `DEFAULT_PORTS` (which also drops ws 80 and wss 443 from the output).
+         * Both stages are reproduced.
+         */
         private val DART_DEFAULT_PORTS = mapOf("http" to 80L, "https" to 443L)
 
         /** Dart `Uri.tryParse`, narrowed to URIs with an authority (see the class KDoc). */
@@ -105,6 +111,8 @@ internal class DartUriLite private constructor(
             if (schemeEnd < 0 || uri.substring(0, schemeEnd).any { it in "/?#\\" }) return null
             val scheme = makeScheme(uri.substring(0, schemeEnd))
             val authorityStart = schemeEnd + 3
+            // Dart's scanner takes `/` or `\` in both slash positions, so
+            // `https:\\h.test/x` has an authority like `https://h.test/x`.
             if (authorityStart > uri.length || !isSlash(uri[schemeEnd + 1]) || !isSlash(uri[schemeEnd + 2])) {
                 return null
             }
@@ -205,7 +213,13 @@ internal class DartUriLite private constructor(
             return "[$hostChars$zoneId]"
         }
 
-        /** Dart's `host` getter drops the brackets of an IPv6 literal but not of an IPvFuture one. */
+        /**
+         * Dart's `host` getter drops the brackets of an IPv6 literal but not of an
+         * IPvFuture one. Reproduced on purpose, although the sanitiser then wraps an
+         * IPvFuture host containing `:` a second time (`[[v1.a:b]]`), which is not a
+         * fixed point. Dart does the same. Production URLs never carry IPvFuture,
+         * and the app re-sanitises rows on merge.
+         */
         private fun hostGetter(host: String): String =
             if (host.startsWith('[') && host.getOrNull(1) != IP_FUTURE_MARKER) {
                 host.substring(1, host.length - 1)
@@ -530,6 +544,11 @@ internal class DartUriLite private constructor(
          * out-of-range, stray continuation and truncated sequences fail, and one
          * BOM at the very start is dropped. Hand-written so the JVM and Android,
          * whose charset decoders differ on malformed input, behave the same.
+         *
+         * Only that first BOM goes, as in Dart. A segment such as
+         * `%EF%BB%BF%EF%BB%BFa` therefore re-encodes with one BOM, which the next pass
+         * drops, so it is not a fixed point. Reproduced on purpose; the app
+         * re-sanitises rows on merge.
          */
         private fun decodeUtf8Strict(bytes: IntArray, count: Int): String {
             fun malformed(): Nothing = throw DartUriFormatException("Invalid UTF-8")
@@ -582,6 +601,9 @@ internal class DartUriLite private constructor(
             }
             for (byte in bytes) out.append('%').append(HEX_DIGITS[byte shr 4]).append(HEX_DIGITS[byte and 0xF])
         }
+
+        /** Whether [c] is an ASCII hex digit. */
+        fun isHexDigit(c: Char): Boolean = hexValue(c) >= 0
 
         private fun hexValue(c: Char): Int = when (c) {
             in '0'..'9' -> c - '0'
