@@ -20,4 +20,10 @@ class LogRefTest {
         assertFalse(LogRef.of(key).contains("example"))
         assertNotEquals(LogRef.of(key), LogRef.of("$key.other"))
     }
+
+    @Test fun fromDigestMatchesOfForTheSameSha256() {
+        val hex = java.security.MessageDigest.getInstance("SHA-256")
+            .digest(key.toByteArray()).joinToString("") { "%02x".format(it) }
+        assertEquals(LogRef.of(key), LogRef.fromDigest(hex))
+    }
 }

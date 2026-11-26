@@ -10,8 +10,12 @@ internal object LogRef {
     private const val LENGTH = 8
 
     fun of(value: String): String =
-        MessageDigest.getInstance("SHA-256")
-            .digest(value.toByteArray())
-            .joinToString("") { "%02x".format(it) }
-            .take(LENGTH)
+        fromDigest(
+            MessageDigest.getInstance("SHA-256")
+                .digest(value.toByteArray())
+                .joinToString("") { "%02x".format(it) },
+        )
+
+    /** The reference for a value whose lowercase-hex SHA-256 [digestHex] the caller already has. */
+    fun fromDigest(digestHex: String): String = digestHex.take(LENGTH)
 }

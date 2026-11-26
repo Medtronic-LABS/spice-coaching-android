@@ -89,7 +89,8 @@ object MediaUrlResolver {
                 // bucket-relative `object_name` while the endpoint wants a
                 // bucket-prefixed storage path, so these land here until the
                 // backend either accepts one or ships the other.
-                Log.w(TAG, "Media presign declined ref=$ref (missing_paths=${body?.missingPaths})")
+                val declined = body?.missingPaths?.size ?: 0
+                Log.w(TAG, "Media presign declined ref=$ref (declined=$declined)")
                 return@runCatching null
             }
             CachedUrl(

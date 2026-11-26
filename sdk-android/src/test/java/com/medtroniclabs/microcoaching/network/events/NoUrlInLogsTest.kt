@@ -59,7 +59,7 @@ class NoUrlInLogsTest {
     }
 
     @Test fun flagsUrlishIdentifiersExceptWhenSanitized() {
-        listOf("url", "signedUri", "downloadLink", "src", "hrefValue", "presignedURL").forEach { n ->
+        listOf("url", "signedUri", "downloadLink", "src", "hrefValue", "presignedURL", "missingPaths", "storagePath").forEach { n ->
             assertTrue(n, flagged("Log.d(TAG, \"x \$$n\")"))
             assertTrue(n, flagged("Log.d(TAG, \"x \${$n.trim()}\")"))
         }
@@ -121,7 +121,7 @@ class NoUrlInLogsTest {
     private val sanitizeStart = Regex("""UrlSanitizer\.sanitize\(""")
     private val messageLocal = Regex("""\b(?:val|var)\s+(\w+)\s*=[^\n]*\.(?:message|localizedMessage)\b""")
     private val throwableNames = "e|ex|err|error|exception|throwable|cause|it|t"
-    private val urlWords = setOf("url", "urls", "uri", "uris", "link", "links", "src", "href")
+    private val urlWords = setOf("url", "urls", "uri", "uris", "link", "links", "src", "href", "path", "paths")
     private val urlNames = setOf("renewed", "key")
     private val identifier = Regex("""[A-Za-z_]\w*""")
     private val nameSegment = Regex("""[A-Z]+(?![a-z])|[A-Z]?[a-z]+|\d+""")

@@ -126,7 +126,7 @@ class AssetCache(
         }
         val keyHash = sha256(key)
         // Logs carry this short reference, never the key (an object URL).
-        val ref = LogRef.of(key)
+        val ref = LogRef.fromDigest(keyHash)
         Log.d(TAG, "localFile(kind=$kind ref=$ref)")
 
         cachedFile(keyHash)?.let {
@@ -228,7 +228,7 @@ class AssetCache(
             fetchUrl = fetchUrl,
         ) ?: return null
         val keyHash = sha256(key)
-        val ref = LogRef.of(key)
+        val ref = LogRef.fromDigest(keyHash)
         runCatching { dao.setPinned(keyHash, true) }
             .onFailure { Log.w(TAG, "pin failed for ref=$ref: ${it::class.java.name}") }
         return file
@@ -242,7 +242,7 @@ class AssetCache(
     suspend fun remove(key: String) {
         if (key.isBlank()) return
         val keyHash = sha256(key)
-        val ref = LogRef.of(key)
+        val ref = LogRef.fromDigest(keyHash)
         val row = dao.get(keyHash) ?: return
         runCatching { File(row.localPath).delete() }
         dao.delete(keyHash)
@@ -276,7 +276,7 @@ class AssetCache(
         url: String,
         onProgress: ((downloaded: Long, total: Long) -> Unit)? = null,
     ): File? = withContext(Dispatchers.IO) {
-        val ref = LogRef.of(key)
+        val ref = LogRef.fromDigest(keyHash)
         val dir = File(cacheDir, kind.name.lowercase()).apply { mkdirs() }
         val target = File(dir, keyHash)
         val tmp = File(dir, "$keyHash.tmp")
