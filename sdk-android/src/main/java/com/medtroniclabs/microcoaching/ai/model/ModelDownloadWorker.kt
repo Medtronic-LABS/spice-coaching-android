@@ -77,7 +77,7 @@ class ModelDownloadWorker(
         // denied the call can fail — we log and continue: the download still works,
         // just without the elevated priority.
         runCatching { setForeground(getForegroundInfo()) }
-            .onFailure { Log.w(TAG, "setForeground at start failed: ${it.message}") }
+            .onFailure { Log.w(TAG, "setForeground at start failed: ${it::class.java.name}") }
 
         val providers = inputData.getStringArray(KEY_PROVIDERS)
             ?.mapNotNull { ModelProvider.fromKey(it) }
@@ -374,7 +374,7 @@ class ModelDownloadWorker(
         runCatching {
             setForeground(buildForegroundInfo(percent, bytesDownloaded, totalBytes))
         }.onFailure {
-            Log.w(TAG, "setForeground progress update failed: ${it.message}")
+            Log.w(TAG, "setForeground progress update failed: ${it::class.java.name}")
         }
     }
 

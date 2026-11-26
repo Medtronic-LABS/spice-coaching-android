@@ -11,7 +11,7 @@ import org.junit.Test
  * message is printed with the stack) into a log call. Presigned URLs carry
  * signatures and release builds keep these logs.
  *
- * Only the files in [scanned] (the four above plus every main file under
+ * Only the files in [scanned] (the five above plus every main file under
  * `network/events/`) are checked, not the rest of the SDK; adding a file to the
  * list is how its logging comes under this rule.
  *
@@ -27,6 +27,7 @@ class NoUrlInLogsTest {
         "$root/network/MediaUrlResolver.kt",
         "$root/data/asset/AssetCache.kt",
         "$root/ui/richtext/blocks/RichImageBlock.kt",
+        "$root/network/SourceDocumentUrlStore.kt",
     ) + (File("$root/network/events").listFiles { f -> f.extension == "kt" }?.map { it.path }?.sorted() ?: emptyList())
 
     @Test
@@ -122,8 +123,8 @@ class NoUrlInLogsTest {
     private val sanitizeStart = Regex("""UrlSanitizer\.sanitize\(""")
     private val messageLocal = Regex("""\b(?:val|var)\s+(\w+)\s*=[^\n]*\.(?:message|localizedMessage)\b""")
     private val throwableNames = "e|ex|err|error|exception|throwable|cause|it|t"
-    private val urlWords = setOf("url", "urls", "uri", "uris", "link", "links", "src", "href", "path", "paths")
-    private val urlNames = setOf("renewed", "key")
+    private val urlWords = setOf("url", "urls", "uri", "uris", "link", "links", "src", "href", "paths")
+    private val urlNames = setOf("renewed", "key", "storagePath")
     private val identifier = Regex("""[A-Za-z_]\w*""")
     private val nameSegment = Regex("""[A-Z]+(?![a-z])|[A-Z]?[a-z]+|\d+""")
 
