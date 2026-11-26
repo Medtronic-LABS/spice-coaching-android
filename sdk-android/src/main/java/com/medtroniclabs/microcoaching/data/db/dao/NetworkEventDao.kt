@@ -8,7 +8,7 @@ import com.medtroniclabs.microcoaching.data.db.entity.NetworkEventEntity
 
 /** Append, bounded-purge and cursor-read access to the [NetworkEventEntity] log. */
 @Dao
-interface NetworkEventDao {
+internal interface NetworkEventDao {
 
     @Insert
     suspend fun insertAll(rows: List<NetworkEventEntity>)

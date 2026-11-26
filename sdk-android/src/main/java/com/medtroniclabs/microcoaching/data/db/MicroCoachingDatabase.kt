@@ -152,7 +152,7 @@ abstract class MicroCoachingDatabase : RoomDatabase() {
     abstract fun requestedModuleDao(): RequestedModuleDao
     abstract fun badgeDao(): BadgeDao
     abstract fun learningCompletionDao(): LearningCompletionDao
-    abstract fun networkEventDao(): NetworkEventDao
+    internal abstract fun networkEventDao(): NetworkEventDao
 
     companion object {
         private const val DATABASE_NAME = "microcoaching.db"

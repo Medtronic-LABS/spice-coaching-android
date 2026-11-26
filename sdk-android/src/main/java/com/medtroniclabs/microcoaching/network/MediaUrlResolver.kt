@@ -1,6 +1,7 @@
 package com.medtroniclabs.microcoaching.network
 
 import android.util.Log
+import com.medtroniclabs.microcoaching.BuildConfig
 import com.medtroniclabs.microcoaching.MicroCoachingSDK
 import com.medtroniclabs.microcoaching.network.events.LogRef
 import com.medtroniclabs.microcoaching.network.events.UrlSanitizer
@@ -44,7 +45,7 @@ object MediaUrlResolver {
      */
     suspend fun resolve(src: String?, objectName: String?, forceFresh: Boolean = false): String? {
         if (!src.isNullOrBlank()) {
-            Log.d(TAG, "resolve: using direct src ${UrlSanitizer.sanitize(src)}")
+            if (BuildConfig.DEBUG) Log.d(TAG, "resolve: using direct src ${UrlSanitizer.sanitize(src)}")
             return src
         }
         val key = objectName?.takeIf { it.isNotBlank() }

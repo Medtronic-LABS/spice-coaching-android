@@ -22,6 +22,13 @@ class NoUrlInLogsTest {
 
     private val root = "src/main/java/com/medtroniclabs/microcoaching"
 
+    private companion object {
+        const val BASELINE = "src/test/resources/net_log/log_leak_baseline.txt"
+
+        /** Handled separately from this rule; not part of the ratchet. */
+        val EXCLUDED = setOf("LiteRtLmService.kt", "ChatMessageComposer.kt")
+    }
+
     private val scanned = listOf(
         "$root/ai/download/ResumableHttpDownloader.kt",
         "$root/network/MediaUrlResolver.kt",
@@ -41,11 +48,53 @@ class NoUrlInLogsTest {
         assertTrue("log calls leak sensitive data:\n" + violations.joinToString("\n"), violations.isEmpty())
     }
 
+    /**
+     * Ratchet for the rest of the SDK. Files outside [scanned] still hold log
+     * calls that predate this rule (mostly exception messages). The counts per
+     * file and rule are recorded in [BASELINE]; a count may only go down. A new
+     * leak, or a file not listed, fails here; fixing one fails until the
+     * baseline is lowered (run with LOGLEAK_BASELINE_WRITE=true to regenerate).
+     * Files whose logging is handled separately are listed in [EXCLUDED].
+     */
+    @Test
+    fun otherFilesDoNotGetWorse() {
+        val covered = scanned.map { File(it).canonicalPath }.toSet()
+        val current = File(root).walkTopDown()
+            .filter { it.isFile && it.extension == "kt" && it.canonicalPath !in covered && it.name !in EXCLUDED }
+            .flatMap { f ->
+                scan(f.name, f.readText()).map { v -> "${f.name}|${v.substringAfter(' ').substringBefore(':')}" }
+            }
+            .groupingBy { it }.eachCount().toSortedMap()
+        val lines = current.map { (k, n) -> "$k|$n" }
+        if (System.getenv("LOGLEAK_BASELINE_WRITE") == "true") {
+            File(BASELINE).writeText(lines.joinToString("\n", postfix = "\n"))
+        }
+        val baseline = File(BASELINE).readLines().filter { it.isNotBlank() }.associate {
+            it.substringBeforeLast('|') to it.substringAfterLast('|').toInt()
+        }
+        val worse = current.filter { (k, n) -> n > (baseline[k] ?: 0) }.map { (k, n) -> "$k: $n (baseline ${baseline[k] ?: 0})" }
+        val better = baseline.filter { (k, n) -> (current[k] ?: 0) < n }.map { (k, n) -> "$k: ${current[k] ?: 0} (baseline $n)" }
+        assertTrue("new log leaks outside the scanned files:\n" + worse.joinToString("\n"), worse.isEmpty())
+        assertTrue("lower the baseline ($BASELINE):\n" + better.joinToString("\n"), better.isEmpty())
+    }
+
     // Scanner self-tests: each synthetic leak must be flagged, each safe line must not.
 
     private fun log(call: String) = "fun f() {\n    $call\n}\n"
 
     private fun flagged(call: String) = scan("Synthetic.kt", log(call)).isNotEmpty()
+
+    @Test fun flagsAnAliasOfAUrlLikeName() {
+        assertTrue(scan("Synthetic.kt", "fun f() {\n    val u = request.url.trim()\n    Log.d(TAG, \"x \$u\")\n}\n").isNotEmpty())
+        assertEquals(
+            false,
+            scan("Synthetic.kt", "fun f() {\n    val n = body?.missingPaths?.size ?: 0\n    Log.d(TAG, \"x \$n\")\n}\n").isNotEmpty(),
+        )
+        assertEquals(
+            false,
+            scan("Synthetic.kt", "fun f() {\n    val ref = LogRef.of(key)\n    Log.d(TAG, \"x \$ref\")\n}\n").isNotEmpty(),
+        )
+    }
 
     @Test fun flagsBareThrowableInTemplate() {
         listOf("e", "ex", "err", "exception", "cause", "it", "throwable", "t").forEach { n ->
@@ -121,9 +170,11 @@ class NoUrlInLogsTest {
 
     private val logStart = Regex("""\b(?:Log|Timber)\.(?:[divwe]|wtf)\(""")
     private val sanitizeStart = Regex("""UrlSanitizer\.sanitize\(""")
+    private val simpleChain = Regex("""[\w.?!]+(?:\(\))?(?:\.[\w?!]+(?:\(\))?)*""")
+    private val localAssignment = Regex("""\b(?:val|var)\s+(\w+)\s*=([^\n]*)""")
     private val messageLocal = Regex("""\b(?:val|var)\s+(\w+)\s*=[^\n]*\.(?:message|localizedMessage)\b""")
     private val throwableNames = "e|ex|err|error|exception|throwable|cause|it|t"
-    private val urlWords = setOf("url", "urls", "uri", "uris", "link", "links", "src", "href", "paths")
+    private val urlWords = setOf("url", "urls", "uri", "uris", "link", "links", "src", "href", "paths", "object")
     private val urlNames = setOf("renewed", "key", "storagePath")
     private val identifier = Regex("""[A-Za-z_]\w*""")
     private val nameSegment = Regex("""[A-Z]+(?![a-z])|[A-Z]?[a-z]+|\d+""")
@@ -139,6 +190,13 @@ class NoUrlInLogsTest {
 
     private fun scan(name: String, text: String): List<String> {
         val messageLocals = messageLocal.findAll(text).map { it.groupValues[1] }.toSet()
+        // An alias is a plain copy or member chain of a URL-like name (`val u = url`,
+        // `val p = request.url.trim()`); anything with arguments or operators is a
+        // computed value (a hash, a count) and is left to the name check.
+        val urlLocals = localAssignment.findAll(text).filter { m ->
+            val rhs = m.groupValues[2].trim()
+            simpleChain.matches(rhs) && identifier.findAll(rhs).any { isUrlName(it.value) }
+        }.map { it.groupValues[1] }.toSet()
         val violations = mutableListOf<String>()
         logStart.findAll(text).forEach { match ->
             val call = callText(text, match.range.last)
@@ -148,6 +206,7 @@ class NoUrlInLogsTest {
             val names = identifier.findAll(codeView(checked)).map { it.value }.toList()
             if (names.any(::isUrlName)) hits += "URL-like value"
             if (names.any { it in messageLocals }) hits += "message held in a local"
+            if (names.any { it in urlLocals }) hits += "URL-like value held in a local"
             hits.forEach { violations += "$name:$line $it: ${call.replace(Regex("""\s+"""), " ")}" }
         }
         return violations

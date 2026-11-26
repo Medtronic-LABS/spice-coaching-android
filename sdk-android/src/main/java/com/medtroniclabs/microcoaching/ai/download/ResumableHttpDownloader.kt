@@ -1,6 +1,7 @@
 package com.medtroniclabs.microcoaching.ai.download
 
 import android.util.Log
+import com.medtroniclabs.microcoaching.BuildConfig
 import com.medtroniclabs.microcoaching.network.events.NetworkEvents
 import com.medtroniclabs.microcoaching.network.events.UrlSanitizer
 import okhttp3.OkHttpClient
@@ -119,7 +120,7 @@ internal object ResumableHttpDownloader {
         // Always close the response to avoid OkHttp connection leaks on early returns.
         response.use { resp ->
             val isPartialContent = resp.code == 206
-            Log.d(logTag, "streamDownload → HTTP ${resp.code} | ${UrlSanitizer.sanitize(url)}")
+            if (BuildConfig.DEBUG) Log.d(logTag, "streamDownload → HTTP ${resp.code} | ${UrlSanitizer.sanitize(url)}")
 
             if (resp.code == 416) {
                 // Range not satisfiable — the server rejected our resume offset. A local file
@@ -145,8 +146,8 @@ internal object ResumableHttpDownloader {
             }
 
             if (!resp.isSuccessful && !isPartialContent) {
-                Log.e(logTag, "streamDownload failed | HTTP ${resp.code} | ${UrlSanitizer.sanitize(url)}")
-                return@runCatching DownloadResult.Failure("HTTP ${resp.code}: ${resp.message}")
+                if (BuildConfig.DEBUG) Log.e(logTag, "streamDownload failed | HTTP ${resp.code} | ${UrlSanitizer.sanitize(url)}")
+                return@runCatching DownloadResult.Failure("HTTP ${resp.code}")
             }
 
             val body = resp.body
@@ -258,7 +259,7 @@ internal object ResumableHttpDownloader {
             DownloadResult.Success
         }
     }.getOrElse { cause ->
-        Log.e(logTag, "streamDownload error for ${UrlSanitizer.sanitize(url)}: ${cause::class.java.name}")
-        DownloadResult.Failure(cause.message ?: "Unknown error")
+        Log.e(logTag, "streamDownload error: ${cause::class.java.name}")
+        DownloadResult.Failure(cause::class.java.name)
     }
 }

@@ -6,6 +6,7 @@ import android.system.ErrnoException
 import android.system.OsConstants
 import android.util.Log
 import androidx.annotation.VisibleForTesting
+import com.medtroniclabs.microcoaching.BuildConfig
 import com.medtroniclabs.microcoaching.MicroCoachingSDK
 import com.medtroniclabs.microcoaching.data.db.dao.CachedAssetDao
 import com.medtroniclabs.microcoaching.data.db.entity.CachedAssetEntity
@@ -130,7 +131,7 @@ class AssetCache(
         Log.d(TAG, "localFile(kind=$kind ref=$ref)")
 
         cachedFile(keyHash)?.let {
-            Log.d(TAG, "cache HIT ref=$ref -> ${it.name}")
+            Log.d(TAG, "cache HIT ref=$ref")
             return it
         }
 
@@ -150,7 +151,7 @@ class AssetCache(
                 Log.w(TAG, "no URL resolved for ref=$ref — cannot cache (fetchUrl returned null/blank)")
                 return null
             }
-            Log.d(TAG, "resolved url for ref=$ref url=${UrlSanitizer.sanitize(url)}")
+            if (BuildConfig.DEBUG) Log.d(TAG, "resolved url for ref=$ref url=${UrlSanitizer.sanitize(url)}")
             downloadAndStore(keyHash, key, kind, url, onProgress)?.let { return it }
 
             // The download failed on a URL something was willing to hand us, which
@@ -322,7 +323,7 @@ class AssetCache(
                         mime = mime,
                     ),
                 )
-                Log.d(TAG, "cached ref=$ref bytes=${target.length()} -> ${target.name}")
+                Log.d(TAG, "cached ref=$ref bytes=${target.length()}")
             }
             evictIfNeeded()
             target

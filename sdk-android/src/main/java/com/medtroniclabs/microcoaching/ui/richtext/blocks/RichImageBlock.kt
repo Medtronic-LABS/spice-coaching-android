@@ -110,14 +110,14 @@ private fun RichImageSurface(
             is AsyncImagePainter.State.Loading -> CircularProgressIndicator()
             is AsyncImagePainter.State.Error -> {
                 val errorType = state.result.throwable::class.java.name
-                Log.w("RichImageBlock", "Coil failed to load cached image file=$file: $errorType")
+                Log.w("RichImageBlock", "Coil failed to load cached image: $errorType")
                 Text(
                     text = stringResource(R.string.rich_media_unavailable),
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
             is AsyncImagePainter.State.Success ->
-                Log.d("RichImageBlock", "Coil loaded cached image file=$file")
+                Log.d("RichImageBlock", "Coil loaded cached image")
             else -> Unit
         }
         Image(

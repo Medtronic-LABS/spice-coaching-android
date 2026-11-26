@@ -223,8 +223,8 @@ class UrlSanitizerVectorsTest {
 
     private companion object {
         const val VECTORS_PATH = "net_log/url_sanitizer_vectors.json"
-        const val VECTORS_SHA256 = "df4218c144aa6627a4afb32cd29fdea19c621b4cddf97384a66eca15d2cc9955"
-        const val EXPECTED_CASES = 153
+        const val VECTORS_SHA256 = "c78c7e037a59573cf4ce3ab0b1aa2a8ccb6b521265cd1359483a086fdd7ddcd1"
+        const val EXPECTED_CASES = 156
         const val OUTPUT_CAP = 2048
         const val GARBAGE_SEED = 20261126L
         const val GARBAGE_SAMPLES = 3000

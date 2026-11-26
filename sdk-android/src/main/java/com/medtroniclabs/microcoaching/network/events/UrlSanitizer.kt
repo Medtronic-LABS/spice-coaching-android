@@ -27,6 +27,9 @@ internal object UrlSanitizer {
     const val MAX_INPUT_LENGTH = 8192
     const val UNPARSABLE = "<unparsable>"
     const val ID_TOKEN = "{id}"
+
+    /** Literal path segments whose next segment is always an identifier. */
+    private val ID_PARENTS = setOf("forgot-password")
     const val REDACTED = "<redacted>"
     const val CAP_MARKER = "\u2026"
 
@@ -141,7 +144,7 @@ internal object UrlSanitizer {
         // is wrapped twice here, exactly as the reference does.
         val authority = if (host.contains(':')) "[$host]" else host
         val port = if (uri.port != null && uri.port != DEFAULT_PORTS[scheme]) ":${uri.port}" else ""
-        val path = uri.path.split('/').joinToString("/") { sanitizeSegment(it) }
+        val path = sanitizePath(uri.path)
         val query = sanitizeQuery(uri.query)
         return "$scheme://$authority$port$path${if (query.isEmpty()) "" else "?$query"}"
     }
@@ -154,6 +157,19 @@ internal object UrlSanitizer {
         val out = StringBuilder(value.length)
         DartUriLite.appendPercentEncoded(out, value) { it.code < 0x80 }
         return out.toString()
+    }
+
+    /**
+     * Masks each segment, and always masks the one that follows a literal
+     * [ID_PARENTS] segment (a value typed by a signed-out user, such as a
+     * username). Mirrors the Dart reference.
+     */
+    private fun sanitizePath(rawPath: String): String {
+        val segments = rawPath.split('/')
+        return segments.indices.joinToString("/") { i ->
+            val afterIdParent = i > 0 && decodeStable(segments[i - 1]) in ID_PARENTS
+            if (afterIdParent && segments[i].isNotEmpty()) ID_TOKEN else sanitizeSegment(segments[i])
+        }
     }
 
     private fun sanitizeSegment(segment: String): String {

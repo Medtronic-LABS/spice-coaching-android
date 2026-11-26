@@ -10,7 +10,7 @@ import androidx.room.PrimaryKey
  * doubles as the pull cursor. [errorType] holds a `NetworkErrorType` wire name.
  */
 @Entity(tableName = "network_event")
-data class NetworkEventEntity(
+internal data class NetworkEventEntity(
     @PrimaryKey(autoGenerate = true)
     @ColumnInfo(name = "id")
     val id: Long = 0,
