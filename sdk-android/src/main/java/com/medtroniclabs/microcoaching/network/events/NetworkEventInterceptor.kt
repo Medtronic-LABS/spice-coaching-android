@@ -21,6 +21,7 @@ import java.util.concurrent.atomic.AtomicLong
 internal class NetworkEventInterceptor(
     private val sinkProvider: () -> NetworkEventSink?,
     private val clock: NetworkClock = NetworkClock.System,
+    private val epoch: () -> Int = { NetworkEventRecorder.epoch },
 ) : Interceptor {
 
     private val dropped = AtomicLong()
@@ -57,20 +58,25 @@ internal class NetworkEventInterceptor(
     }
 
     /**
-     * Reads the start time. The broad catch is a deliberate boundary for the
-     * same reason as in [record]: if the injected clock throws, timing falls
-     * back to [NetworkClock.System] for the whole call instead of failing it.
+     * Reads the start time and the recorder epoch. The broad catch is a
+     * deliberate boundary for the same reason as in [record]: if the injected
+     * clock or epoch source throws, the call falls back to [NetworkClock.System]
+     * and the recorder's own epoch instead of failing.
      */
     private fun start(): Start = try {
-        Start(clock.wallMs(), clock.monoNs(), clock)
+        Start(clock.wallMs(), clock.monoNs(), clock, epoch())
     } catch (e: Exception) {
         systemStart()
     } catch (e: LinkageError) {
         systemStart()
     }
 
-    private fun systemStart(): Start =
-        Start(NetworkClock.System.wallMs(), NetworkClock.System.monoNs(), NetworkClock.System)
+    private fun systemStart(): Start = Start(
+        NetworkClock.System.wallMs(),
+        NetworkClock.System.monoNs(),
+        NetworkClock.System,
+        NetworkEventRecorder.epoch,
+    )
 
     private fun recordFailure(request: Request, start: Start, call: Call, error: Exception) {
         record(request, start, statusCode = null) {
@@ -103,6 +109,7 @@ internal class NetworkEventInterceptor(
                     statusCode = statusCode,
                     durationMs = durationMs,
                     errorType = errorType(),
+                    epoch = start.epoch,
                 ),
             )
         } catch (e: Exception) {
@@ -112,8 +119,11 @@ internal class NetworkEventInterceptor(
         }
     }
 
-    /** When a call started, and the clock that took the reading (so the duration uses the same source). */
-    private class Start(val wallMs: Long, val t0: Long, val clock: NetworkClock)
+    /**
+     * When a call started, the clock that took the reading (so the duration uses
+     * the same source) and the recorder epoch at that moment.
+     */
+    private class Start(val wallMs: Long, val t0: Long, val clock: NetworkClock, val epoch: Int)
 
     private companion object {
         val VALID_STATUS = 100..599

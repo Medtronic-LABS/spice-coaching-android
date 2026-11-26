@@ -1549,7 +1549,9 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
         /**
          * Stored SDK network events with an id above [afterId], ascending, at most
          * [limit] (clamped to 1..500; a negative [afterId] reads from the start).
-         * Never throws; runs its I/O on a background dispatcher.
+         * Never throws; runs its I/O on a background dispatcher. It may wait
+         * behind database work (opening the database, an SDK write), so callers
+         * should wrap it in `withTimeout`; the SDK sets no timeout of its own.
          */
         suspend fun getNetworkEvents(afterId: Long, limit: Int): NetworkEventsResult =
             networkEvents.read(afterId, limit)
@@ -1557,7 +1559,11 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
         /**
          * Deletes every stored network event, e.g. on a user switch, and discards
          * events still queued. Works before [isInitialized] once the store is bound
-         * at process start. Never throws.
+         * at process start. Never throws. It may wait behind database work, so
+         * callers should wrap it in `withTimeout`; the SDK sets no timeout of its
+         * own. A timeout or cancel only makes the delete finish later: once
+         * called, it is never left undone, and events from calls already in
+         * flight are discarded.
          */
         suspend fun clearNetworkEvents(): NetworkEventsClearResult = networkEvents.clear()
     }

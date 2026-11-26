@@ -59,6 +59,7 @@ class NetworkEventRecorderTest {
         )
     }
 
+    /** A row whose request started now, under the current epoch. */
     private fun row(i: Int, error: NetworkErrorType? = null) = NetworkEventRow(
         startedAtMs = 1_000L + i,
         method = "GET",
@@ -66,6 +67,7 @@ class NetworkEventRecorderTest {
         statusCode = if (error == null) 200 else null,
         durationMs = 5,
         errorType = error,
+        epoch = NetworkEventRecorder.epoch,
     )
 
     @Test
@@ -263,6 +265,26 @@ class NetworkEventRecorderTest {
 
         assertEquals(listOf("insert", "clear"), dao.ops)
         assertEquals(2L, clearedThrough)
+        assertTrue(dao.rows.isEmpty())
+    }
+
+    @Test
+    fun cancellingTheCallerWhileClearWaitsForTheLockStillDeletes() = runTest {
+        bindFake()
+        val release = CompletableDeferred<Unit>()
+        dao.insertGate = release
+        NetworkEventRecorder.offer(row(0))
+        advanceUntilIdle() // row 0 is in flight and holds the write lock
+
+        val clearing = launch { NetworkEventRecorder.clear() }
+        advanceUntilIdle() // the epoch is bumped; clear waits for the lock
+        clearing.cancel()
+        advanceUntilIdle()
+        release.complete(Unit)
+        advanceUntilIdle()
+
+        assertTrue(clearing.isCancelled)
+        assertEquals(listOf("insert", "clear"), dao.ops)
         assertTrue(dao.rows.isEmpty())
     }
 

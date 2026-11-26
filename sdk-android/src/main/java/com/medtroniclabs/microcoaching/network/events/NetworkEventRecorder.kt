@@ -12,6 +12,7 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.BufferOverflow
@@ -32,8 +33,8 @@ import java.util.concurrent.atomic.AtomicLong
  * [offer] is O(1) and never blocks: rows go into a bounded queue that drops its
  * oldest entry on overflow. One consumer drains the queue in batches of at most
  * [BATCH_SIZE] and writes each batch in one transaction. Writes and [clear] share
- * one lock, and every queued row carries the [epoch] it was offered in, so rows
- * queued before a clear are never written after it.
+ * one lock, and every row carries the [epoch] read when its request started,
+ * so rows from requests that started before a clear are never written after it.
  *
  * The writer runs on its own scope, not the SDK's, because the SDK scope is
  * cancelled on shutdown and re-init. Rows lost to overflow, to an unbound
@@ -62,7 +63,7 @@ internal object NetworkEventRecorder : NetworkEventSink, NetworkEventLog {
     /** Rows lost process-wide: queue overflow, offered while unbound, or a failed write. */
     val droppedCount: Long get() = dropped.get()
 
-    /** Bumped by every [clear]; rows offered under an older epoch are discarded at write. */
+    /** Bumped by every [clear]; rows whose request started under an older epoch are discarded at write. */
     val epoch: Int get() = epochCounter.get()
 
     /**
@@ -89,17 +90,19 @@ internal object NetworkEventRecorder : NetworkEventSink, NetworkEventLog {
         }
         // DROP_OLDEST: trySend only fails once the channel is closed, and the
         // overflow victim is counted by onUndeliveredElement.
-        if (!w.channel.trySend(Queued(event, epochCounter.get())).isSuccess) dropped.incrementAndGet()
+        if (!w.channel.trySend(event).isSuccess) dropped.incrementAndGet()
     }
 
     /**
      * Deletes every stored row and returns the highest id deleted (0 if none).
-     * Rows still queued are discarded; a batch already being written finishes
-     * first and is deleted too. Store failures propagate to the caller.
+     * Rows from requests that started before this call, queued or still in
+     * flight, are discarded; a batch already being written finishes first and
+     * is deleted too. Store failures propagate to the caller.
      *
      * The epoch is bumped before the write lock is taken, so even when the
-     * delete then fails, rows queued before this call are discarded and are
-     * not counted in [droppedCount].
+     * delete then fails, those rows are discarded and are not counted in
+     * [droppedCount]. Once called, the delete is not cancellable: cancelling
+     * the caller can only make it finish later, never leave it undone.
      *
      * @throws NetworkEventRecorderNotBoundException if [bind] has not run. It
      *   is an [IllegalStateException] subclass, so a caller that also maps
@@ -108,7 +111,7 @@ internal object NetworkEventRecorder : NetworkEventSink, NetworkEventLog {
     override suspend fun clear(): Long {
         val w = writer ?: throw NetworkEventRecorderNotBoundException()
         epochCounter.incrementAndGet()
-        return withContext(w.dispatcher) { w.lock.withLock { w.store().clear() } }
+        return withContext(w.dispatcher + NonCancellable) { w.lock.withLock { w.store().clear() } }
     }
 
     /**
@@ -160,8 +163,6 @@ internal object NetworkEventRecorder : NetworkEventSink, NetworkEventLog {
         if (loggedTypes.add(type)) log(type)
     }
 
-    private class Queued(val row: NetworkEventRow, val epoch: Int)
-
     /** The queue, its single consumer and the lazily opened store. */
     private class Writer(
         val dispatcher: CoroutineDispatcher,
@@ -169,7 +170,7 @@ internal object NetworkEventRecorder : NetworkEventSink, NetworkEventLog {
         private val log: (String) -> Unit,
     ) {
         val lock = Mutex()
-        val channel = Channel<Queued>(QUEUE_CAPACITY, BufferOverflow.DROP_OLDEST) { dropped.incrementAndGet() }
+        val channel = Channel<NetworkEventRow>(QUEUE_CAPACITY, BufferOverflow.DROP_OLDEST) { dropped.incrementAndGet() }
         val scope = CoroutineScope(
             SupervisorJob() + dispatcher + CoroutineExceptionHandler { _, e -> logOnce(e, log) },
         )
@@ -182,7 +183,7 @@ internal object NetworkEventRecorder : NetworkEventSink, NetworkEventLog {
         fun launch() {
             scope.launch {
                 for (first in channel) {
-                    val batch = ArrayList<Queued>(BATCH_SIZE)
+                    val batch = ArrayList<NetworkEventRow>(BATCH_SIZE)
                     batch += first
                     while (batch.size < BATCH_SIZE) batch += channel.tryReceive().getOrNull() ?: break
                     write(batch)
@@ -198,9 +199,9 @@ internal object NetworkEventRecorder : NetworkEventSink, NetworkEventLog {
          * this writer is being cancelled; one thrown by the store while the
          * scope is active is an ordinary failure. Errors propagate.
          */
-        private suspend fun write(batch: List<Queued>) = lock.withLock {
+        private suspend fun write(batch: List<NetworkEventRow>) = lock.withLock {
             val current = epochCounter.get()
-            val rows = batch.filter { it.epoch == current }.map { it.row.toEntity() }
+            val rows = batch.filter { it.epoch == current }.map { it.toEntity() }
             if (rows.isEmpty()) return@withLock
             try {
                 store().insertAndPurge(rows)

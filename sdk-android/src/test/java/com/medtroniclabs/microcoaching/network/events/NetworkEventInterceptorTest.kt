@@ -109,6 +109,37 @@ class NetworkEventInterceptorTest {
     }
 
     @Test
+    fun theEpochIsReadOnceWhenTheRequestStarts() {
+        server.enqueue(MockResponse())
+        server.start()
+        val epoch = AtomicInteger(4)
+        val client = OkHttpClient.Builder()
+            .addInterceptor(NetworkEventInterceptor({ capture }, clock) { epoch.getAndIncrement() })
+            .addInterceptor { chain ->
+                epoch.set(9) // a clear while the call is in flight
+                chain.proceed(chain.request())
+            }
+            .build()
+
+        get(client, server.url("/x")).close()
+
+        assertEquals(4, rows.single().epoch)
+    }
+
+    @Test
+    fun aThrowingEpochSourceFallsBackToTheRecorderEpoch() {
+        server.enqueue(MockResponse().setResponseCode(204))
+        server.start()
+        val client = OkHttpClient.Builder()
+            .addInterceptor(NetworkEventInterceptor({ capture }, clock) { throw IllegalStateException() })
+            .build()
+
+        get(client, server.url("/x")).use { assertEquals(204, it.code) }
+
+        assertEquals(NetworkEventRecorder.epoch, rows.single().epoch)
+    }
+
+    @Test
     fun durationIsNeverNegative_whenTheMonotonicClockGoesBack() {
         server.enqueue(MockResponse())
         server.start()
