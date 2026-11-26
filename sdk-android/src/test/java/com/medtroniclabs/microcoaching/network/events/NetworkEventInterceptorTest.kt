@@ -587,6 +587,22 @@ class NetworkEventInterceptorTest {
     }
 
     @Test
+    fun instrument_countsCallsBeforeBindAsDropped() {
+        NetworkEventRecorder.resetForTesting()
+        try {
+            server.enqueue(MockResponse())
+            server.start()
+            val client = NetworkEvents.instrument(OkHttpClient.Builder()).build()
+
+            get(client, server.url("/before-bind")).close()
+
+            assertEquals(1L, NetworkEventRecorder.droppedCount)
+        } finally {
+            NetworkEventRecorder.resetForTesting()
+        }
+    }
+
+    @Test
     fun instrument_isIdempotent() {
         val builder = OkHttpClient.Builder()
         NetworkEvents.instrument(builder)

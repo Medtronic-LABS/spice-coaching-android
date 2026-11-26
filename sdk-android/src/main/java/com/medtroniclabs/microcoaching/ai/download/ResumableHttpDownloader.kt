@@ -2,6 +2,7 @@ package com.medtroniclabs.microcoaching.ai.download
 
 import android.util.Log
 import com.medtroniclabs.microcoaching.BuildConfig
+import com.medtroniclabs.microcoaching.network.events.NetworkEvents
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
@@ -74,6 +75,13 @@ internal object ResumableHttpDownloader {
     private const val BUFFER_SIZE = 8 * 1024  // 8 KB
     private const val PROGRESS_EMIT_INTERVAL_MS = 500L
 
+    /** A fresh client for one download; built per call, so it is instrumented here at its builder. */
+    internal fun newClient(): OkHttpClient = NetworkEvents.instrument(
+        OkHttpClient.Builder()
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(300, TimeUnit.SECONDS),
+    ).build()
+
     /**
      * Streams [url] to [outputFile], resuming from existing bytes if the server supports Range.
      * Reports progress (0–99) via [onProgress]. Verifies the result against [minValidBytes] and
@@ -96,10 +104,7 @@ internal object ResumableHttpDownloader {
         validate: ((File) -> String?)? = null,
         onProgress: suspend (percent: Int, bytesDownloaded: Long, totalBytes: Long) -> Unit,
     ): DownloadResult = runCatching {
-        val client = OkHttpClient.Builder()
-            .connectTimeout(30, TimeUnit.SECONDS)
-            .readTimeout(300, TimeUnit.SECONDS)
-            .build()
+        val client = newClient()
 
         // Resume from partial file
         val existingBytes = if (outputFile.exists()) outputFile.length() else 0L

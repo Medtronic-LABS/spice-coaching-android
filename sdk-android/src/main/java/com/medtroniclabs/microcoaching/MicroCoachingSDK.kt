@@ -57,6 +57,7 @@ import com.medtroniclabs.microcoaching.ai.translation.OnDeviceTranslator
 import com.medtroniclabs.microcoaching.domain.decision.CoachingMode
 import com.medtroniclabs.microcoaching.network.CoachingApiService
 import com.medtroniclabs.microcoaching.network.NetworkModule
+import com.medtroniclabs.microcoaching.network.events.NetworkEventRecorder
 import com.medtroniclabs.microcoaching.sdk.CoachingDataRepository
 import com.medtroniclabs.microcoaching.sdk.MicroCoachingDataCallback
 import com.medtroniclabs.microcoaching.sdk.SdkDataExport
@@ -588,6 +589,8 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
     )
 
     init {
+        // Idempotent; covers hosts that remove the App Startup initializer.
+        NetworkEventRecorder.bind(config.context)
         if (config.backendUrl.isNotBlank()) {
             // On a destructive Room migration, clear inbound watermarks so the next
             // pull returns a full snapshot — else the prefs watermark outlives the

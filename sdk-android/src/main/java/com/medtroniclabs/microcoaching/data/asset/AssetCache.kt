@@ -5,9 +5,11 @@ import android.os.StatFs
 import android.system.ErrnoException
 import android.system.OsConstants
 import android.util.Log
+import androidx.annotation.VisibleForTesting
 import com.medtroniclabs.microcoaching.MicroCoachingSDK
 import com.medtroniclabs.microcoaching.data.db.dao.CachedAssetDao
 import com.medtroniclabs.microcoaching.data.db.entity.CachedAssetEntity
+import com.medtroniclabs.microcoaching.network.events.NetworkEvents
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -67,11 +69,13 @@ class AssetCache(
      * does NOT carry the API auth interceptor — the asset host (S3) differs from
      * the API host and the URL already embeds its signature.
      */
-    private val downloadClient: OkHttpClient by lazy {
-        OkHttpClient.Builder()
-            .connectTimeout(30, TimeUnit.SECONDS)
-            .readTimeout(60, TimeUnit.SECONDS)
-            .build()
+    @VisibleForTesting
+    internal val downloadClient: OkHttpClient by lazy {
+        NetworkEvents.instrument(
+            OkHttpClient.Builder()
+                .connectTimeout(30, TimeUnit.SECONDS)
+                .readTimeout(60, TimeUnit.SECONDS),
+        ).build()
     }
 
     private val cacheDir: File by lazy {
@@ -394,8 +398,11 @@ class AssetCache(
         keyLocks.getOrPut(keyHash) { Mutex() }
     }
 
-    private fun isOnline(): Boolean =
+    /** Connectivity check before a download; replaceable so tests can run without an SDK instance. */
+    @VisibleForTesting
+    internal var isOnline: () -> Boolean = {
         runCatching { MicroCoachingSDK.getInstance().isNetworkAvailable() }.getOrDefault(false)
+    }
 
     /**
      * True when writing [incomingBytes] would still leave at least [minFreeBytes]

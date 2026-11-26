@@ -3,6 +3,7 @@ package com.medtroniclabs.microcoaching.network
 import android.util.Log
 import com.medtroniclabs.microcoaching.MicroCoachingConfig
 import com.medtroniclabs.microcoaching.BuildConfig
+import com.medtroniclabs.microcoaching.network.events.NetworkEvents
 import kotlinx.serialization.json.Json
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -125,7 +126,7 @@ object NetworkModule {
             )
         }
 
-        return builder.build()
+        return NetworkEvents.instrument(builder).build()
     }
 
     /**
