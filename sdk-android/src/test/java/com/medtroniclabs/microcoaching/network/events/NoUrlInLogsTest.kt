@@ -11,7 +11,7 @@ import org.junit.Test
  * message is printed with the stack) into a log call. Presigned URLs carry
  * signatures and release builds keep these logs.
  *
- * Only the files in [scanned] (the three above plus every main file under
+ * Only the files in [scanned] (the four above plus every main file under
  * `network/events/`) are checked, not the rest of the SDK; adding a file to the
  * list is how its logging comes under this rule.
  *
@@ -26,6 +26,7 @@ class NoUrlInLogsTest {
         "$root/ai/download/ResumableHttpDownloader.kt",
         "$root/network/MediaUrlResolver.kt",
         "$root/data/asset/AssetCache.kt",
+        "$root/ui/richtext/blocks/RichImageBlock.kt",
     ) + (File("$root/network/events").listFiles { f -> f.extension == "kt" }?.map { it.path }?.sorted() ?: emptyList())
 
     @Test
@@ -129,7 +130,7 @@ class NoUrlInLogsTest {
     private val rules = listOf(
         "bare throwable in template" to
             Regex("""\$(?:$throwableNames)\b|\$\{\s*(?:$throwableNames)\s*\}"""),
-        "exception or response message" to Regex("""\.message\b|\.cause\b|localizedMessage|\.toString\(\)"""),
+        "exception or response message" to Regex("""\.message\b|\.cause\b|\.throwable\b|localizedMessage|\.toString\(\)"""),
         "response or error body" to Regex("""\bbody=|errorBody|response\.body|\.string\(\)"""),
         "response headers" to Regex("""\bheaders\b"""),
         "throwable argument" to Regex(""",\s*[A-Za-z_]\w*\s*,?\s*\)\z"""),
