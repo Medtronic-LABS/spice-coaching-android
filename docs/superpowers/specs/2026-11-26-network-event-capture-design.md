@@ -168,7 +168,7 @@ Side effects of the bump:
 - **Consumer:** `for (first in channel)`, then drain up to 64 events with `tryReceive`, then `writeLock.withLock { val e = epoch.get(); rows = batch.filter { it.epoch == e }; dao.insertAndPurge(rows, 500) }`.
   - Each row's `epoch` is captured when its request starts (interceptor entry) and carried on the row, not read when the row is offered, so a request that started before a clear is dropped even if it finishes after it.
   - It catches any `Exception` from opening or writing the store (`SQLException`, `IllegalStateException` for a closed DB or failed migration, or anything unexpected); a failed batch costs only that batch. A `CancellationException` is rethrown only when the writer's scope is cancelled; one thrown by the store while the scope is active is an ordinary failure.
-  - An `Error` (not an `Exception`) in the consumer ends it. `writer` stays non-null, so later offers fill the queue and then drop silently. This is an accepted limit.
+  - A `LinkageError` (a class failing to load while Room or SQLite initialises) is handled like an exception: it costs that batch only. Any other `Error` in the consumer ends it. `writer` stays non-null, so later offers fill the queue and then drop silently. This is an accepted limit.
   - Each exception type is logged once per process, type only.
 - **Process death:** the only loss is the queue, a window of milliseconds, since there is no timer. Committed rows survive.
 - **WorkManager:** recorded the same way. Rows written before the SDK is initialised become visible once it is.

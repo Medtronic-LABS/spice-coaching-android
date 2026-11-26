@@ -29,6 +29,7 @@ import java.io.IOException
 import java.net.InetAddress
 import java.net.Socket
 import java.net.SocketAddress
+import java.net.SocketException
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
 import java.util.Collections
@@ -422,6 +423,32 @@ class NetworkEventInterceptorTest {
     }
 
     // --- never fails or changes a call -------------------------------------
+
+    @Test
+    fun aRetriedConnectTimeoutAfterAResetConnectionIsAConnectionTimeout() {
+        // Attempt 1 connects (the probe is marked) and then fails with a reset;
+        // attempt 2 never connects, so no network interceptor runs for it.
+        var attempt = 0
+        val client = OkHttpClient.Builder()
+            .addInterceptor(NetworkEventInterceptor({ capture }, clock))
+            .addInterceptor { chain ->
+                // Stands in for the retry loop: first hop goes through the probe,
+                // then the whole call ends in a connect timeout.
+                if (attempt++ == 0) {
+                    runCatching {
+                        ConnectionProbe.intercept(object : Interceptor.Chain by chain {
+                            override fun proceed(request: Request): Response = throw SocketException("reset")
+                        })
+                    }
+                }
+                throw SocketTimeoutException()
+            }
+            .build()
+
+        expectFailure(client, Request.Builder().url("http://api.example.test/").build())
+
+        assertEquals(NetworkErrorType.CONNECTION_TIMEOUT, rows.single().errorType)
+    }
 
     @Test
     fun throwingSink_stillReturnsTheResponseWithItsBody() {

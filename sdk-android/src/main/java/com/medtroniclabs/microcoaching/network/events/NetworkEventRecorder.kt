@@ -197,7 +197,8 @@ internal object NetworkEventRecorder : NetworkEventSink, NetworkEventLog {
          * migration, or anything unexpected) costs only this batch, so the
          * consumer never dies. A [CancellationException] is rethrown only when
          * this writer is being cancelled; one thrown by the store while the
-         * scope is active is an ordinary failure. Errors propagate.
+         * scope is active is an ordinary failure. A [LinkageError] is handled
+         * the same way; any other Error propagates.
          */
         private suspend fun write(batch: List<NetworkEventRow>) = lock.withLock {
             val current = epochCounter.get()
@@ -210,10 +211,14 @@ internal object NetworkEventRecorder : NetworkEventSink, NetworkEventLog {
                 failed(e, rows.size)
             } catch (e: Exception) {
                 failed(e, rows.size)
+            } catch (e: LinkageError) {
+                // A class that fails to load while Room or SQLite initialises costs
+                // this batch only; the writer must outlive it.
+                failed(e, rows.size)
             }
         }
 
-        private fun failed(e: Exception, lost: Int) {
+        private fun failed(e: Throwable, lost: Int) {
             dropped.addAndGet(lost.toLong())
             logOnce(e, log)
         }

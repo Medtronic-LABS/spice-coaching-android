@@ -189,6 +189,21 @@ class NetworkEventRecorderTest {
     }
 
     @Test
+    fun aLinkageErrorFromTheStoreDoesNotStopTheWriter() = runTest {
+        bindFake()
+        dao.failures += NoClassDefFoundError("sqlite")
+
+        NetworkEventRecorder.offer(row(0))
+        advanceUntilIdle()
+        NetworkEventRecorder.offer(row(1))
+        advanceUntilIdle()
+
+        assertEquals(listOf(1_001L), dao.rows.map { it.startedAtMs })
+        assertEquals(1L, NetworkEventRecorder.droppedCount)
+        assertEquals(listOf("NoClassDefFoundError"), logged)
+    }
+
+    @Test
     fun aCancellationExceptionFromTheStoreWhileActiveDoesNotStopTheWriter() = runTest {
         bindFake()
         dao.failures += CancellationException("store-side cancel")
@@ -360,7 +375,7 @@ class NetworkEventRecorderTest {
         val rows = Collections.synchronizedList(mutableListOf<NetworkEventEntity>())
         val batchSizes = mutableListOf<Int>()
         val ops = mutableListOf<String>()
-        val failures = ArrayDeque<RuntimeException>()
+        val failures = ArrayDeque<Throwable>()
         var insertGate: CompletableDeferred<Unit>? = null
         private var nextId = 1L
 
