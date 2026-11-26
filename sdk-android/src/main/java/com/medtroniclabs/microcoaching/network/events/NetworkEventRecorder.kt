@@ -40,7 +40,7 @@ import java.util.concurrent.atomic.AtomicLong
  * recorder or to a failed write are counted in [droppedCount]. Failures are
  * logged by exception type only, once per type per process.
  */
-internal object NetworkEventRecorder : NetworkEventSink {
+internal object NetworkEventRecorder : NetworkEventSink, NetworkEventLog {
 
     const val BATCH_SIZE = 64
     const val QUEUE_CAPACITY = 256
@@ -105,10 +105,21 @@ internal object NetworkEventRecorder : NetworkEventSink {
      *   is an [IllegalStateException] subclass, so a caller that also maps
      *   store failures (IllegalStateException) must catch it first.
      */
-    suspend fun clear(): Long {
+    override suspend fun clear(): Long {
         val w = writer ?: throw NetworkEventRecorderNotBoundException()
         epochCounter.incrementAndGet()
         return withContext(w.dispatcher) { w.lock.withLock { w.store().clear() } }
+    }
+
+    /**
+     * Reads one page on the writer's dispatcher, under the write lock so it
+     * never sees a half-applied clear. Store failures propagate to the caller.
+     *
+     * @throws NetworkEventRecorderNotBoundException if [bind] has not run.
+     */
+    override suspend fun read(afterId: Long, limit: Int): NetworkEventPage {
+        val w = writer ?: throw NetworkEventRecorderNotBoundException()
+        return withContext(w.dispatcher) { w.lock.withLock { w.store().page(afterId, limit) } }
     }
 
     @VisibleForTesting
@@ -208,7 +219,10 @@ internal object NetworkEventRecorder : NetworkEventSink {
     }
 }
 
-/** Thrown by [NetworkEventRecorder.clear] before the recorder is bound. */
+/** One read of the store: [rows] after a cursor and [maxId] (0 when empty), consistent with each other. */
+internal class NetworkEventPage(val rows: List<NetworkEventEntity>, val maxId: Long)
+
+/** Thrown by [NetworkEventRecorder.read] and [NetworkEventRecorder.clear] before the recorder is bound. */
 internal class NetworkEventRecorderNotBoundException :
     IllegalStateException("Network event recorder is not bound")
 
@@ -219,6 +233,16 @@ internal class NetworkEventStore(
 ) {
     suspend fun insertAndPurge(rows: List<NetworkEventEntity>) =
         dao.insertAndPurge(rows, NetworkEventDao.DEFAULT_KEEP)
+
+    /** Rows with an id above [afterId] (ascending, at most [limit]) and the highest id, in one transaction. */
+    suspend fun page(afterId: Long, limit: Int): NetworkEventPage {
+        var rows = emptyList<NetworkEventEntity>()
+        val maxId = inTransaction {
+            rows = dao.after(afterId, limit)
+            dao.maxId()
+        }
+        return NetworkEventPage(rows, maxId)
+    }
 
     /** Deletes all rows in one transaction; returns the highest id deleted (0 if none). */
     suspend fun clear(): Long = inTransaction {
