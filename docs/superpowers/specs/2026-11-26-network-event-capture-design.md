@@ -2,7 +2,7 @@
 
 I read everything in this repo read-only, on branch `feat/21-network-event-capture` (HEAD `92444ca` = `origin/development`, tree clean). I also read the app worktree `<local-path>` @ `7c63f4b7`. I opened no env, `local.properties` or key files.
 
-To pin down how the Dart reference behaves, I ran it unmodified (Dart 3.12.2) on about 80 edge inputs. This ran in the scratchpad only and changed nothing in either repo. The vectors file has 109 cases, `vectors_version` 1, last changed in `fe50b6b0`, SHA-256 `f14e7e6161d1dedfaabb4212b576684f606f6d398847d63725956a9d9bcab98b`.
+To pin down how the Dart reference behaves, I ran it unmodified (Dart 3.12.2) on about 80 edge inputs. This ran in the scratchpad only and changed nothing in either repo. The vectors file had 109 cases at design time and now has 153 (44 parser-quirk cases were added in the app repo, commit 298a9904), `vectors_version` 1, last changed in `fe50b6b0`, SHA-256 `df4218c144aa6627a4afb32cd29fdea19c621b4cddf97384a66eca15d2cc9955`.
 
 ---
 
@@ -13,7 +13,7 @@ The app's hidden Network page shows every Dart request. The coaching SDK makes i
 
 ## 2. Goals
 - G1. One row per call on the four SDK clients, with the 7 contract fields. Covers 2xx, 3xx, 4xx, 5xx, timeouts, connect errors and cancels.
-- G2. The URL is sanitised in Kotlin, passing all 109 shared vectors, before it is queued or stored. No raw URL or query value is ever persisted.
+- G2. The URL is sanitised in Kotlin, passing all 153 shared vectors, before it is queued or stored. No raw URL or query value is ever persisted.
 - G3. Recording never blocks, fails or changes a call. Storage failures are swallowed with a log line that gives only the exception type.
 - G4. The table holds at most 500 rows, purged in the same transaction as each insert.
 - G5. `getNetworkEvents(afterId, limit)` and `clearNetworkEvents()` are public, never throw, and work for rows written by workers.
@@ -44,7 +44,7 @@ The app's hidden Network page shows every Dart request. The coaching SDK makes i
 | Capture point | **OkHttp application interceptor `NetworkEventInterceptor`, added last among application interceptors, plus a small network-interceptor `ConnectionProbe`.** Both are installed by one helper, `NetworkEvents.instrument(builder)`, at each client builder. | **Network interceptor only:** OkHttp runs network interceptors only after `ConnectInterceptor`, so connect failures (DNS, refused, connect timeout, TLS or bad certificate) are never seen. It would also give one row per redirect hop. **EventListener:** a single slot per client, many callbacks, more code than the contract needs. **Central client factory:** changes timeouts and pools on four clients for a diagnostics feature. |
 | Timeout phase | `ConnectionProbe` (network interceptor) marks the `Call` as connected in a concurrent set. The application interceptor reads and clears the mark. A `SocketTimeoutException` is `receiveTimeout` if connected, otherwise `connectionTimeout`. | Matching on exception message text: it differs between JVM and Android ("connect timed out", "failed to connect … after", "timeout") and reads messages we promised not to depend on. |
 | Writer | A process-wide `NetworkEventRecorder`: a bounded `Channel(256, DROP_OLDEST, onUndeliveredElement = drop counter)`. Producers call `trySend`, which never suspends. One consumer coroutine on `Dispatchers.IO` drains up to 64 events into one Room transaction that also purges. A `Mutex` serialises writes and clears, and an `epoch` drops stale events. | Synchronous insert on the OkHttp thread (blocks the call, breaks D-d). One `launch` per event (unbounded fan-out, no batching or ordering). In-memory ring only (lost on process death, misses worker runs). |
-| URL parser for the sanitiser | **Own small parser** porting the parts of Dart's `Uri.parse` that matter (§7f). | **OkHttp `HttpUrl`** fails at least 8 of the 109 vectors (details in §7f). **`java.net.URI`** fails at least 3 vectors and throws on inputs Dart accepts. |
+| URL parser for the sanitiser | **Own small parser** porting the parts of Dart's `Uri.parse` that matter (§7f). | **OkHttp `HttpUrl`** fails at least 8 of the 109 original vectors (details in §7f). **`java.net.URI`** fails at least 3 vectors and throws on inputs Dart accepts. |
 
 ## 6. Decisions recorded (owner, not reopened)
 - **D-a.** Pull model; Room store of about 500 rows (pinned to 500); no native-to-Dart push.
@@ -186,10 +186,10 @@ A line-for-line port of `url_sanitizer.dart`, with the same constants, regexes a
 - strip the trailing `…` marker, then re-add it;
 - `_sanitize`, `_cap`, `_dropPartialToken`.
 
-`Uri.tryParse` is replaced by a ~150-line `DartUriLite` that reproduces Dart 3.12.2 (`sdk/lib/core/uri.dart`: `_normalizeRegName` :2555, `_normalizeEscape` :2799, `_makePath` replaceBackslash :2685-2692, `_removeDotSegments` :3028, `_uriDecode` :3629):
+`Uri.tryParse` is replaced by a `DartUriLite` (about 600 lines once written) that reproduces Dart 3.12.2 (`sdk/lib/core/uri.dart`: `_normalizeRegName` :2555, `_normalizeEscape` :2799, `_makePath` replaceBackslash :2685-2692, `_removeDotSegments` :3028, `_uriDecode` :3629):
 
 1. **Pre-encode non-ASCII, per code point, as uppercase UTF-8 `%XX`.** A lone surrogate becomes `%EF%BF%BD`. Do not use `String.toByteArray`, which writes `?`. (Probed: `x/\uD800y` → `x/%EF%BF%BDy`.)
-2. **Scheme:** `[A-Za-z][A-Za-z0-9+.-]*:`, lowercased, must be in `{http, https, ws, wss}`, and must be followed by `//`. Otherwise `<unparsable>` (covers `https:h.test/x`, leading space).
+2. **Scheme:** `[A-Za-z][A-Za-z0-9+.-]*:`, lowercased, must be in `{http, https, ws, wss}`, and must be followed by two characters, each `/` or `\` (Dart's scanner treats `\` as `/` here). Otherwise `<unparsable>` (covers `https:h.test/x`, leading space).
 3. **Authority** ends at the first of `/ ? # \`. Dart ends it at a backslash: `https://h.test\@evil.test/x` → `/{id}/x`.
 4. **Userinfo** (before `@`): dropped. More than one `@`, or a `[` / `]` in the userinfo → `<unparsable>` (the shared vector named "password containing an at sign", plus probes with a doubled `@` and a bracket in the userinfo).
 5. **Host:**
@@ -197,7 +197,7 @@ A line-for-line port of `url_sanitizer.dart`, with the same constants, regexes a
    - Otherwise reg-name normalisation: `%XX` of an unreserved char is decoded; other escapes are kept; a bad `%` becomes `%25`; a gen-delim (`: / ? # [ ] @`) → `<unparsable>`; other non-reg-name ASCII → `%XX`. Then lowercase the whole host with `Locale.ROOT`.
    - Empty → `<unparsable>`.
    - Covers vectors `%2e` host → `h.test`, IDN → `b%c3%bccher`, and probes `h test` → `h%20test`, `H%41` → `ha`.
-6. **Port:** the text after `:`. Empty means no port. Parse with `toLongOrNull()` (accepts `+`/`-` like Dart's `int.parse`; overflow → `<unparsable>`; `8080:90` → `<unparsable>`). Emit only if it differs from the scheme default (`0443` → dropped; probes `:00` → `:0`, `:+80` → `:80`).
+6. **Port:** the text after `:`. Empty means no port. Parse with a Dart-compatible `int.tryParse` (accepts `+`/`-` and hex like Dart; no range check, so `65536` is kept; overflow → `<unparsable>`; `8080:90` → `<unparsable>`). Emit only if it differs from the scheme default (`0443` → dropped; probes `:00` → `:0`, `:+80` → `:80`).
 7. **Path:**
    - `\` → `/`.
    - Escape normalisation: an unreserved escape is decoded, so `%2e` becomes `.` before dot handling; a bad `%` becomes `%25`; other escapes are uppercased; non-path ASCII → `%XX`.
@@ -228,7 +228,7 @@ A line-for-line port of `url_sanitizer.dart`, with the same constants, regexes a
 
 In production the input is always OkHttp's canonical `HttpUrl.toString()` (http or https, already percent-encoded, IDN already punycode), so most parser quirks never occur in practice. Exact parity matters mainly for the vectors. The app also re-sanitises native rows on merge (app spec §12), so a divergence on an exotic input cannot leak.
 
-**Vectors that cannot be matched by a reasonable implementation: none.** With the parser above, all 109 match. The alternatives fail these concrete vectors:
+**Vectors that cannot be matched by a reasonable implementation: none.** With the parser above, all 153 match. The alternatives fail these concrete vectors:
 - **OkHttp `HttpUrl`:**
   - rejects `ws`/`wss` (`realtime websocket query allowlist`, `non default port kept`, `port: ws default 80 dropped`, `port: wss default 443 dropped`, `port: wss non-default kept`);
   - adds `/` to root URLs (`root url without a path`);
@@ -427,7 +427,7 @@ Tests, in task order:
 
 | Test | Kind | Asserts |
 |---|---|---|
-| `UrlSanitizerVectorsTest` | JVM | §7f: version 1, 109 cases, SHA-256 pin, expected, `sanitize(expected) == expected`, idempotence, ≤ 2048. Plus a seeded random totality test. |
+| `UrlSanitizerVectorsTest` | JVM | §7f: version 1, 153 cases, SHA-256 pin, expected, `sanitize(expected) == expected`, idempotence, ≤ 2048. Plus a seeded random totality test. |
 | `NetworkErrorClassifierTest` | JVM | every row of the §7b table, including `SSLHandshakeException` with and without a `CertificateException` cause, and the connected flag |
 | `NetworkEventInterceptorTest` | JVM + MockWebServer, capturing sink, fake clock | <ul><li>200, 404 and 500 give one row each with the right fields</li><li>presigned `X-Goog-Signature` URL: no query stored and the signature string appears nowhere</li><li>302 → 200 gives 1 row with the original URL and status 200</li><li>cache hit (client with a temp `Cache`, `max-age`) gives 0 rows; a conditional 304 gives 1 row</li><li>read timeout (`SocketPolicy.NO_RESPONSE`) → `receiveTimeout`</li><li>throwing `SocketFactory` → `connectionTimeout`</li><li>refused port, or a `Dns` that throws `UnknownHostException` → `connectionError`</li><li>untrusted `HeldCertificate` → `badCertificate`</li><li>`call.cancel()` → `cancel`</li><li>throwing sink: call returns 200 with the body intact</li><li>a counting downstream interceptor sees exactly 1 `proceed`</li><li>a 999 status → `null` + `unknown`</li></ul> |
 | `NetworkEventRecorderTest` | JVM + coroutines-test, fake DAO | <ul><li>batching (≤ 64 per transaction)</li><li>200 parallel offers give 200 rows</li><li>with the DAO blocked, all 500 calls return within a bound and the drop counter > 0</li><li>a DAO throwing `SQLiteException` or `IllegalStateException` is swallowed and the writer keeps going</li><li>stale-epoch events are dropped</li><li>clear is serialised after an in-flight batch</li><li>unbound recorder drops and counts</li></ul> |
