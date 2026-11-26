@@ -5,6 +5,7 @@ import android.database.sqlite.SQLiteException
 import androidx.test.core.app.ApplicationProvider
 import com.medtroniclabs.microcoaching.data.db.dao.NetworkEventDao
 import com.medtroniclabs.microcoaching.data.db.entity.NetworkEventEntity
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
@@ -171,6 +172,35 @@ class NetworkEventRecorderTest {
     }
 
     @Test
+    fun anUnexpectedStoreExceptionDoesNotStopTheWriter() = runTest {
+        bindFake()
+        dao.failures += IllegalArgumentException("unexpected")
+
+        NetworkEventRecorder.offer(row(0))
+        advanceUntilIdle()
+        NetworkEventRecorder.offer(row(1))
+        advanceUntilIdle()
+
+        assertEquals(listOf(1_001L), dao.rows.map { it.startedAtMs })
+        assertEquals(1L, NetworkEventRecorder.droppedCount)
+        assertEquals(listOf("IllegalArgumentException"), logged)
+    }
+
+    @Test
+    fun aCancellationExceptionFromTheStoreWhileActiveDoesNotStopTheWriter() = runTest {
+        bindFake()
+        dao.failures += CancellationException("store-side cancel")
+
+        NetworkEventRecorder.offer(row(0))
+        advanceUntilIdle()
+        NetworkEventRecorder.offer(row(1))
+        advanceUntilIdle()
+
+        assertEquals(listOf(1_001L), dao.rows.map { it.startedAtMs })
+        assertEquals(1L, NetworkEventRecorder.droppedCount)
+    }
+
+    @Test
     fun aFailingStoreOpenIsSwallowedAndRetried() = runTest {
         var attempts = 0
         NetworkEventRecorder.bindForTesting(
@@ -280,12 +310,27 @@ class NetworkEventRecorderTest {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val dbFile = context.getDatabasePath(DATABASE_FILE)
         dbFile.delete()
+        val caller = Thread.currentThread()
+        val openThreads: MutableList<Thread> = Collections.synchronizedList(mutableListOf())
+        val opened = CountDownLatch(1)
+        NetworkEventRecorder.openStoreForContext = { _ ->
+            openThreads += Thread.currentThread()
+            opened.countDown()
+            NetworkEventStore(dao) { block -> block() }
+        }
 
         NetworkEventRecorder.bind(context)
         NetworkEventRecorder.bind(context)
 
         assertSame(NetworkEventRecorder, NetworkEventSinkHolder.current())
+        assertTrue(openThreads.isEmpty())
         assertFalse(dbFile.exists())
+
+        NetworkEventRecorder.offer(row(0))
+        assertTrue(opened.await(10, TimeUnit.SECONDS))
+
+        assertEquals(1, openThreads.size)
+        assertTrue(openThreads.single() !== caller)
     }
 
     /** In-memory [NetworkEventDao] with AUTOINCREMENT-like ids, failure injection and a gate. */

@@ -1,7 +1,6 @@
 package com.medtroniclabs.microcoaching.network.events
 
 import android.content.Context
-import android.database.SQLException
 import android.util.Log
 import androidx.annotation.VisibleForTesting
 import androidx.room.withTransaction
@@ -17,6 +16,8 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -52,6 +53,12 @@ internal object NetworkEventRecorder : NetworkEventSink {
     @Volatile
     private var writer: Writer? = null
 
+    /** Opens the Room-backed store; the only place [bind] touches the database. Runs on the writer. */
+    @VisibleForTesting
+    internal var openStoreForContext: (Context) -> NetworkEventStore = ::openRoomStore
+
+    private fun openRoomStore(context: Context) = NetworkEventStore.of(MicroCoachingDatabase.getInstance(context))
+
     /** Rows lost process-wide: queue overflow, offered while unbound, or a failed write. */
     val droppedCount: Long get() = dropped.get()
 
@@ -65,7 +72,8 @@ internal object NetworkEventRecorder : NetworkEventSink {
      */
     fun bind(context: Context) {
         val app = context.applicationContext
-        start(Dispatchers.IO, { NetworkEventStore.of(MicroCoachingDatabase.getInstance(app)) }) { type ->
+        val open = openStoreForContext
+        start(Dispatchers.IO, { open(app) }) { type ->
             Log.w(TAG, "Network event write failed: $type")
         }
     }
@@ -89,7 +97,13 @@ internal object NetworkEventRecorder : NetworkEventSink {
      * Rows still queued are discarded; a batch already being written finishes
      * first and is deleted too. Store failures propagate to the caller.
      *
-     * @throws NetworkEventRecorderNotBoundException if [bind] has not run.
+     * The epoch is bumped before the write lock is taken, so even when the
+     * delete then fails, rows queued before this call are discarded and are
+     * not counted in [droppedCount].
+     *
+     * @throws NetworkEventRecorderNotBoundException if [bind] has not run. It
+     *   is an [IllegalStateException] subclass, so a caller that also maps
+     *   store failures (IllegalStateException) must catch it first.
      */
     suspend fun clear(): Long {
         val w = writer ?: throw NetworkEventRecorderNotBoundException()
@@ -109,6 +123,7 @@ internal object NetworkEventRecorder : NetworkEventSink {
         synchronized(this) {
             writer?.scope?.cancel()
             writer = null
+            openStoreForContext = ::openRoomStore
             if (NetworkEventSinkHolder.sink === this) NetworkEventSinkHolder.sink = null
             dropped.set(0)
             epochCounter.set(0)
@@ -164,6 +179,14 @@ internal object NetworkEventRecorder : NetworkEventSink {
             }
         }
 
+        /**
+         * Writes one batch. Any [Exception] from opening or writing the store
+         * (SQLException, IllegalStateException for a closed DB or failed
+         * migration, or anything unexpected) costs only this batch, so the
+         * consumer never dies. A [CancellationException] is rethrown only when
+         * this writer is being cancelled; one thrown by the store while the
+         * scope is active is an ordinary failure. Errors propagate.
+         */
         private suspend fun write(batch: List<Queued>) = lock.withLock {
             val current = epochCounter.get()
             val rows = batch.filter { it.epoch == current }.map { it.row.toEntity() }
@@ -171,10 +194,9 @@ internal object NetworkEventRecorder : NetworkEventSink {
             try {
                 store().insertAndPurge(rows)
             } catch (e: CancellationException) {
-                throw e
-            } catch (e: SQLException) {
+                currentCoroutineContext().ensureActive()
                 failed(e, rows.size)
-            } catch (e: IllegalStateException) {
+            } catch (e: Exception) {
                 failed(e, rows.size)
             }
         }
