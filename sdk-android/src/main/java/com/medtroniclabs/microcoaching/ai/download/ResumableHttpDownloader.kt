@@ -258,7 +258,7 @@ internal object ResumableHttpDownloader {
             DownloadResult.Success
         }
     }.getOrElse { cause ->
-        Log.e(logTag, "streamDownload error for ${UrlSanitizer.sanitize(url)}: ${cause::class.java.simpleName}")
+        Log.e(logTag, "streamDownload error for ${UrlSanitizer.sanitize(url)}: ${cause::class.java.name}")
         DownloadResult.Failure(cause.message ?: "Unknown error")
     }
 }

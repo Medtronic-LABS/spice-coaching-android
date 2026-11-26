@@ -141,7 +141,7 @@ class AssetCache(
                 return null
             }
             val url = runCatching { fetchUrl() }
-                .onFailure { Log.w(TAG, "fetchUrl threw for key=$key: ${it::class.java.simpleName}") }
+                .onFailure { Log.w(TAG, "fetchUrl threw for key=$key: ${it::class.java.name}") }
                 .getOrNull()
             if (url.isNullOrBlank()) {
                 Log.w(TAG, "no URL resolved for key=$key — cannot cache (fetchUrl returned null/blank)")
@@ -156,7 +156,7 @@ class AssetCache(
             // so a stale URL self-heals instead of leaving a permanent blank.
             val renewed = renewUrl?.let { renew ->
                 runCatching { renew() }
-                    .onFailure { Log.w(TAG, "renewUrl threw for key=$key: ${it::class.java.simpleName}") }
+                    .onFailure { Log.w(TAG, "renewUrl threw for key=$key: ${it::class.java.name}") }
                     .getOrNull()
             }
             if (renewed.isNullOrBlank() || renewed == url) {
@@ -225,7 +225,7 @@ class AssetCache(
             fetchUrl = fetchUrl,
         ) ?: return null
         runCatching { dao.setPinned(sha256(key), true) }
-            .onFailure { Log.w(TAG, "pin failed for key=$key: ${it::class.java.simpleName}") }
+            .onFailure { Log.w(TAG, "pin failed for key=$key: ${it::class.java.name}") }
         return file
     }
 
@@ -325,14 +325,14 @@ class AssetCache(
                 Log.w(TAG, "insufficient storage for key=$key — cannot cache asset")
                 throw InsufficientStorageException(e)
             }
-            Log.w(TAG, "download IO error for key=$key: ${e::class.java.simpleName}")
+            Log.w(TAG, "download IO error for key=$key: ${e::class.java.name}")
             null
         } catch (e: Exception) {
             runCatching { tmp.delete() }
             // Propagate the proactive free-space refusal so callers can show the
             // storage-specific message (it isn't an IOException, so it lands here).
             if (e is InsufficientStorageException) throw e
-            Log.w(TAG, "download error for key=$key: ${e::class.java.simpleName}")
+            Log.w(TAG, "download error for key=$key: ${e::class.java.name}")
             null
         }
     }

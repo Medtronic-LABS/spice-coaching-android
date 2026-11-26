@@ -94,7 +94,7 @@ object MediaUrlResolver {
                 url = entry.presignedUrl,
                 expiresAtEpochSec = nowEpochSec() + (entry.expiresSeconds - EXPIRY_SAFETY_MARGIN_SEC).coerceAtLeast(0),
             )
-        }.onFailure { Log.w(TAG, "Media presign error for $key: ${it::class.java.simpleName}") }.getOrNull()
+        }.onFailure { Log.w(TAG, "Media presign error for $key: ${it::class.java.name}") }.getOrNull()
             ?: return null
 
         mutex.withLock { cache[key] = resolved }
