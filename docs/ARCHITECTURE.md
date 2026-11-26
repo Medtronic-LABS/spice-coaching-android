@@ -1,7 +1,7 @@
 # MicroCoaching Android SDK — Architecture Document
 
 > **Generated**: 2026-08-31
-> **Version**: `sdk-android:0.6.0-SNAPSHOT` · `sdk-android-sherpa:0.4.0-SNAPSHOT`
+> **Version**: `sdk-android:0.7.0-SNAPSHOT` · `sdk-android-sherpa:0.4.0-SNAPSHOT`
 > **Disclaimer**: Generated using AI and lightly edited/reviewed.
 
 ---
@@ -49,7 +49,7 @@ The SDK owns its own Room database, WorkManager sync, and OpenTelemetry pipeline
 | UI | Jetpack Compose (BOM 2025.04.01), consumable from XML/Fragment hosts |
 | Architecture style | Single facade + manual composition root; layered packages (ui / domain / data / ai / sync / sdk / network) |
 | Deliverables | `sdk-android` (required `.aar`), `sdk-android-sherpa` (optional offline Bengali STT), `app` (sample, not shipped) |
-| Data stores | Room (`microcoaching.db`, schema v35, 23 tables), 7 SharedPreferences files (no DataStore) |
+| Data stores | Room (`microcoaching.db`, schema v37, 25 tables), 7 SharedPreferences files (no DataStore) |
 | Background work | WorkManager: inbound/outbound sync (15 min), model download (foreground service), STT pack download |
 | On-device AI | LiteRT-LM engine + BM25 retrieval + ML Kit EN↔BN translation; default model Qwen3-0.6B mixed-INT4 (~497 MB, ungated) |
 | External dependencies | Coaching backend (sync, RAG, morning cards, dashboards), HuggingFace (model download), OTLP collector (optional telemetry) |
@@ -78,7 +78,7 @@ graph LR
     end
 
     subgraph "On-device state"
-        Room[("microcoaching.db\nRoom, 23 tables")]
+        Room[("microcoaching.db\nRoom, 25 tables")]
         Prefs[("SharedPreferences\n7 files")]
         Files[("Model + asset files\ngetExternalFilesDir")]
     end
@@ -138,7 +138,7 @@ Three Gradle modules; only the first two publish.
 ```mermaid
 graph TD
     subgraph "This repo (root project: MicroCoachingSDK)"
-        Core[":sdk-android\ncom.medtroniclabs.microcoaching:sdk-android\n0.6.0-SNAPSHOT"]
+        Core[":sdk-android\ncom.medtroniclabs.microcoaching:sdk-android\n0.7.0-SNAPSHOT"]
         Sherpa[":sdk-android-sherpa\n…:sdk-android-sherpa 0.4.0-SNAPSHOT\noffline BN STT"]
         Sample[":app\nsample / manual test harness"]
     end
@@ -269,11 +269,11 @@ Voice: `ChatVoiceInputController` picks per language/connectivity — EN → pla
 
 | Store | Type | Purpose | Access pattern |
 |-------|------|---------|----------------|
-| **Room `microcoaching.db`** | SQLite, schema **v35** | System of record on device: content catalogue, per-CHW state, outbound event queues, caches | DAOs internal; hosts go through `CoachingDataRepository` only |
+| **Room `microcoaching.db`** | SQLite, schema **v37** | System of record on device: content catalogue, per-CHW state, outbound event queues, caches | DAOs internal; hosts go through `CoachingDataRepository` only |
 | **SharedPreferences** (7 files, no DataStore) | Key-value | Sync watermarks (`micro_coaching_sync`), model consent + lifecycle (`microcoaching_model_prefs` — shared file so consent and file state can't disagree), CHW context, chat mode, onboarding/reminder | `util/PrefsNames.kt` is the registry (documents one deliberate file collision) |
 | **Files** (`getExternalFilesDir`) | Blobs | LLM model bundle, STT pack, `AssetCache` media (images/videos/PDFs for offline render) | Downloaded on demand; storage floored at `minFreeStorageBytes` (512 MB default) |
 
-**Migrations**: 21 hand-written (`MIGRATION_14_15`…`MIGRATION_34_35`) plus `fallbackToDestructiveMigration` as a safety net. The facade detects a destructive wipe (`SyncPrefs.lastKnownRoomVersion` vs the current schema version) and resets **watermarks only**, so the next inbound pull re-fetches the full snapshot.
+**Migrations**: 23 hand-written (`MIGRATION_14_15`…`MIGRATION_36_37`) plus `fallbackToDestructiveMigration` as a safety net. The facade detects a destructive wipe (`SyncPrefs.lastKnownRoomVersion` vs the current schema version) and resets **watermarks only**, so the next inbound pull re-fetches the full snapshot.
 
 ### 6.2 Core Data Model
 
@@ -355,9 +355,39 @@ erDiagram
     MODULE_CACHE ||--o{ CHW_QUIZ_QUESTION_STATE : quizzed
 ```
 
-Full table inventory (23): content — `module_cache`, `assigned_module`, `requested_module`, `published_source_document`, `source_document_thumbnail`, `assigned_video`, `chat_faq`, `badge`, `trigger_definition`, `module_trigger_binding`, `behavioural_gap_cache`, `config_threshold`, `morning_card_cache`; per-CHW state — `chw_gap_profile_local`, `chw_module_completion`, `chw_module_partial_completion`, `chw_quiz_question_state`, `dashboard_cache`; outbound queues — `coaching_event`, `llm_trace`, `digital_proficiency_event` (the latter two pruned after 30 days once synced); chat — `chat_messages`; infra — `cached_asset`.
+Full table inventory (25): content — `module_cache`, `assigned_module`, `requested_module`, `published_source_document`, `source_document_thumbnail`, `assigned_video`, `chat_faq`, `badge`, `trigger_definition`, `module_trigger_binding`, `behavioural_gap_cache`, `config_threshold`, `morning_card_cache`; per-CHW state — `chw_gap_profile_local`, `chw_module_completion`, `chw_module_partial_completion`, `chw_quiz_question_state`, `learning_completion`, `dashboard_cache`; outbound queues — `coaching_event`, `llm_trace`, `digital_proficiency_event` (the latter two pruned after 30 days once synced); chat — `chat_messages`; infra — `cached_asset`, `network_event` (diagnostics, see 6.4).
 
 Localization convention: bilingual columns store `{"bn": …, "en": …}` JSON blobs read through `data/localized/LocalizedText.kt`.
+
+### 6.4 Network events (diagnostics)
+
+The SDK makes its own OkHttp requests, often from WorkManager with no host UI running. So that a host can see them, every call on the four SDK OkHttp clients is recorded as one row in the `network_event` table (schema v37). Recording never blocks, fails or changes a call.
+
+- **Interceptor.** `NetworkEvents.instrument(builder)` adds `NetworkEventInterceptor` (an application interceptor) and a `ConnectionProbe` to a client builder, immediately before `build()`. It reads no headers or bodies. The URL is sanitised in Kotlin by `UrlSanitizer` (a Dart-compatible parser) before the row is queued; no raw URL or query value is stored.
+- **Recorder.** `NetworkEventRecorder` is a process-wide object bound from App Startup and the SDK constructor. Producers call `trySend` on a bounded queue (capacity 256, drops the oldest on overflow and counts it). One consumer on its own IO scope drains up to 64 rows per Room transaction. Write failures are swallowed and logged by exception type only.
+- **Table.** `network_event(id, started_at_ms, method, url, status_code, duration_ms, error_type)`, at most 500 rows: each insert purges older rows in the same transaction. `AUTOINCREMENT` keeps ids monotonic across purges and clears.
+- **Clear and epoch.** `clearNetworkEvents()` bumps an epoch, then deletes every row under the write lock. The epoch is captured when the request **starts** and carried on the row, so a request that started before a clear is dropped at write even if it finishes after it. Reads take the same write lock, so a read never sees a half-applied clear. Clear works whenever the recorder is bound, even if the SDK is not initialised. The SDK never clears by itself; the host owns that trigger (for example on user wipe).
+- **Public API** (`sdk.diagnostics`, on the `MicroCoachingSDK` companion; neither call throws):
+  - `suspend fun getNetworkEvents(afterId: Long, limit: Int): NetworkEventsResult`
+  - `suspend fun clearNetworkEvents(): NetworkEventsClearResult`
+  - Status values (`NetworkEventsStatus`): `OK` (`ok`), `NOT_INITIALIZED` (`notInitialized`), `STORE_ERROR` (no wire value; hosts map it to an error).
+  - `NetworkEventsResult.toContractMap()` gives the contract v1 map; `sdk_event_version` is 1.
+
+**Transport inventory.** `TransportRegistryTest` scans the main sources and fails the build when an HTTP site is neither instrumented nor registered with a reason.
+
+| Transport | Instrumented | Reason |
+|-----------|--------------|--------|
+| API client (Retrofit over OkHttp, `NetworkModule`) | Yes | Sync, presign, dashboards, chat |
+| `AssetCache` download client | Yes | Presigned images, PDFs, thumbnails |
+| `ResumableHttpDownloader` (new client per call) | Yes | Model and STT archive downloads |
+| `ModelSizeProbe` client | Yes | Model size HEAD and ranged GET |
+| ExoPlayer `DefaultHttpDataSource` | No | Streams presigned media; non-goal (open decision 4 in the design spec) |
+| Coil default loader (avatar URL) | No | Non-goal; not an SDK OkHttp client |
+| OTLP exporter | No | Telemetry export; non-goal |
+| ML Kit translate pack download | No | Downloaded by Play services, outside SDK control |
+| Unused `OkHttpClient` imports in two hook handlers and `ModelDownloadWorker` | n/a | No client is built; registered as inert |
+
+The page therefore under-reports media streaming. Design: `docs/superpowers/specs/2026-11-26-network-event-capture-design.md`.
 
 ### 6.3 Data Flow
 
@@ -505,7 +535,7 @@ sequenceDiagram
 |---|---|
 | `./gradlew :sdk-android:assembleRelease` | Build the `.aar` |
 | `./gradlew :sdk-android:test` | Unit tests (110 files; JVM, no device) |
-| `./gradlew :sdk-android:publishToMavenLocal` | Publish `com.medtroniclabs.microcoaching:sdk-android:0.6.0-SNAPSHOT` (+ sources jar) to `~/.m2` |
+| `./gradlew :sdk-android:publishToMavenLocal` | Publish `com.medtroniclabs.microcoaching:sdk-android:0.7.0-SNAPSHOT` (+ sources jar) to `~/.m2` |
 | `./gradlew :sdk-android-sherpa:publishToMavenLocal` | Publish the optional STT sidecar (`0.4.0-SNAPSHOT`) |
 | `./gradlew :sdk-android:retrievalLab` | Dev-only local retrieval server (`127.0.0.1:7171`) over the audit corpus for BM25/serve-gate tuning |
 
@@ -671,7 +701,7 @@ spice-coaching-android/
 ├── scripts/check-no-hardcoded-colors.sh   # CI theming guard
 │
 ├── sdk-android/                      # THE library (.aar) — 462 main / 110 test files
-│   ├── build.gradle.kts              # publishing (0.6.0-SNAPSHOT), retrievalLab task
+│   ├── build.gradle.kts              # publishing (0.7.0-SNAPSHOT), retrievalLab task
 │   ├── consumer-rules.pro            # ships in the .aar (library is not minified)
 │   ├── src/main/AndroidManifest.xml  # all permissions/activities/provider merge from here
 │   └── src/main/java/com/medtroniclabs/microcoaching/

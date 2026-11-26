@@ -2,7 +2,7 @@
 
 An Android library that embeds AI coaching directly inside the SPICE clinical app, delivering on-device guidance to Community Health Workers (CHWs) in Bangladesh — with full OpenTelemetry observability, an exportable chat UI, and offline-first data storage.
 
-> **Version:** `0.6.0-SNAPSHOT` · **Min SDK:** 23 · **ABI:** `arm64-v8a` · **Language:** Kotlin
+> **Version:** `0.7.0-SNAPSHOT` · **Min SDK:** 23 · **ABI:** `arm64-v8a` · **Language:** Kotlin
 
 ---
 
@@ -29,7 +29,7 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full architecture — c
 
 ```kotlin
 // settings.gradle.kts — mavenLocal() first; app/build.gradle.kts:
-implementation("com.medtroniclabs.microcoaching:sdk-android:0.6.0-SNAPSHOT")
+implementation("com.medtroniclabs.microcoaching:sdk-android:0.7.0-SNAPSHOT")
 ```
 
 ```kotlin
@@ -54,6 +54,22 @@ CoachingChatBottomSheet.show(supportFragmentManager)
 Deeper topics: [initialization & config](docs/documentation/02-initialization.md) · [UI embedding](docs/documentation/03-ui-embedding.md) · [workflow hooks & data](docs/documentation/04-hooks-and-data.md) · [model & voice](docs/documentation/05-model-and-voice.md) · [theming](docs/documentation/07-theming.md) · [troubleshooting](docs/documentation/06-troubleshooting.md).
 
 ---
+
+## Network diagnostics API
+
+The SDK records its own HTTP calls (sync, presign, asset and model downloads) in a bounded local table (500 rows, sanitised URLs, no headers or bodies). A host reads them with:
+
+```kotlin
+suspend fun MicroCoachingSDK.getNetworkEvents(afterId: Long, limit: Int): NetworkEventsResult
+suspend fun MicroCoachingSDK.clearNetworkEvents(): NetworkEventsClearResult
+```
+
+(Both are on the `MicroCoachingSDK` companion, package `com.medtroniclabs.microcoaching.sdk.diagnostics` for the result types.)
+
+- **Paging.** Rows come back in ascending id order. Pass the last id you saw as `afterId`; `limit` is clamped to 1..500. `maxId` is the highest stored id (0 when empty); if it is lower than your cursor, the table was cleared, so restart from 0.
+- **Status.** `OK`, `NOT_INITIALIZED` (SDK not initialised or recorder not bound; empty list), `STORE_ERROR` (read failed; map it to an error in your layer). Neither call throws.
+- **Clear.** `clearNetworkEvents()` deletes all rows and returns `clearedThroughId`. Call it when the user is wiped; the SDK does not do it itself.
+- **Timeouts.** The calls queue behind the writer's lock, so wrap them in `withTimeout` and treat a timeout as "try again later".
 
 ## Telemetry configuration
 

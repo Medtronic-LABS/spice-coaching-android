@@ -166,6 +166,7 @@ Side effects of the bump:
 - **Its scope is not `sdkScope`.** `sdkScope` is cancelled on `shutdown()` and re-init (`MicroCoachingSDK.kt:1075-1110`), so the recorder has its own `SupervisorJob + Dispatchers.IO` scope with a `CoroutineExceptionHandler` that logs type-only.
 - **Producer:** `trySend`, O(1), never suspends. On overflow the oldest queued event is dropped and counted (`onUndeliveredElement`).
 - **Consumer:** `for (first in channel)`, then drain up to 64 events with `tryReceive`, then `writeLock.withLock { val e = epoch.get(); rows = batch.filter { it.epoch == e }; dao.insertAndPurge(rows, 500) }`.
+  - Each row's `epoch` is captured when its request starts (interceptor entry) and carried on the row, not read when the row is offered, so a request that started before a clear is dropped even if it finishes after it.
   - It catches `android.database.SQLException` (which includes `SQLiteException`) and `IllegalStateException` (closed DB, failed migration).
   - Each exception type is logged once per process, type only.
 - **Process death:** the only loss is the queue, a window of milliseconds, since there is no timer. Committed rows survive.
@@ -176,6 +177,7 @@ Logic lives in `NetworkEventsReader(isSdkInitialized: () -> Boolean, store)` so 
 1. If `!MicroCoachingSDK.isInitialized()` or the store is not bound: `NOT_INITIALIZED`, `events = []`, `maxId = 0`.
 2. Clamp: `a = afterId.coerceAtLeast(0)`, `l = limit.coerceIn(1, 500)`.
 3. `withContext(IO) { db.withTransaction { rows = after(a, l); max = maxId() } }`. This returns ascending ids, never more than `l`, and an honest `max_id` read in the same transaction (0 when empty).
+3a. `read()` takes the writer lock (a deliberate deviation from the first design): a read never sees a half-applied clear.
 4. On a store read failure (`SQLException` or `IllegalStateException`): `STORE_ERROR`. The plugin maps this to `result.error`, which Dart turns into `failed` (open decision 6). Nothing throws to the caller.
 
 **Confirmed:** `rawCount` and `lastRawId` are not on the wire. Dart derives them (`native_network_events_result.dart:26-31`, `micro_coaching_service.dart:137-157`). `contract_version` from the request is ignored; the SDK always answers `sdk_event_version` 1, and Dart treats any other value as `unavailable`.
@@ -271,7 +273,7 @@ The contract field names live once, in `toContractMap`, which the SDK tests agai
 
 ### 7h. Clearing on user switch (requirement 9) and clock skew (L2)
 `clearNetworkEvents()`:
-1. `epoch.incrementAndGet()`. Queued and in-flight events from before the clear are now stale and are dropped at write.
+1. `epoch.incrementAndGet()` (before the write lock is taken). Events whose request started before the clear, queued or in flight, carry the old epoch and are dropped at write.
 2. `writeLock.withLock { tx { through = maxId(); deleteAll() } }`.
 3. Returns `OK(clearedThroughId = through)`.
 
