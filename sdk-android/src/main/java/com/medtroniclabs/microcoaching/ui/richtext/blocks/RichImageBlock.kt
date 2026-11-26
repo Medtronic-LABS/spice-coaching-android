@@ -29,6 +29,7 @@ import androidx.compose.foundation.Image
 import com.medtroniclabs.microcoaching.R
 import com.medtroniclabs.microcoaching.content.richtext.RichBlock
 import com.medtroniclabs.microcoaching.network.MediaUrlResolver
+import com.medtroniclabs.microcoaching.network.events.LogRef
 
 /**
  * Renders a TipTap image node. Resolves the loadable URL via [MediaUrlResolver]
@@ -49,12 +50,7 @@ internal fun RichImageBlock(image: RichBlock.Image, modifier: Modifier = Modifie
     val key = remember(image.objectName, image.src) {
         (image.objectName?.takeIf { it.isNotBlank() }
             ?: MicroCoachingSDK.getInstance().assetCache.stableKeyForUrl(image.src))
-            .also {
-                Log.d(
-                    "RichImageBlock",
-                    "resolve start: objectName=${image.objectName} src=${image.src} -> key=$it",
-                )
-            }
+            .also { Log.d("RichImageBlock", "resolve start: ref=${LogRef.of(it.orEmpty())}") }
     }
     val file by rememberCachedImageFile(
         key = key,
@@ -113,18 +109,15 @@ private fun RichImageSurface(
         when (val state = painter.state) {
             is AsyncImagePainter.State.Loading -> CircularProgressIndicator()
             is AsyncImagePainter.State.Error -> {
-                Log.w(
-                    "RichImageBlock",
-                    "Coil failed to load cached image file=$file: ${state.result.throwable}",
-                    state.result.throwable,
-                )
+                val errorType = state.result.throwable::class.java.name
+                Log.w("RichImageBlock", "Coil failed to load cached image: $errorType")
                 Text(
                     text = stringResource(R.string.rich_media_unavailable),
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
             is AsyncImagePainter.State.Success ->
-                Log.d("RichImageBlock", "Coil loaded cached image file=$file")
+                Log.d("RichImageBlock", "Coil loaded cached image")
             else -> Unit
         }
         Image(

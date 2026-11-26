@@ -1,6 +1,6 @@
 # 06 — Troubleshooting & Verification
 
-**Version:** 0.6.0-SNAPSHOT · **Date:** 2026-08-31 · **Status:** Draft
+**Version:** 0.7.0-SNAPSHOT · **Date:** 2026-08-31 · **Status:** Draft
 
 Common integration failures, how to verify a working integration, a security checklist, and an FAQ.
 
@@ -10,8 +10,8 @@ Common integration failures, how to verify a working integration, a security che
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| `Could not resolve com.medtroniclabs.microcoaching:sdk-android:0.6.0-SNAPSHOT` | Artifacts not in Maven Local. | Run `./gradlew :sdk-android:publishToMavenLocal` in the SDK repo (and `:sdk-android-sherpa:publishToMavenLocal` if used). See [01 — Step 1](./01-setup.md#step-1--build--publish-the-sdk-to-maven-local). |
-| Resolves `sdk-android` but not `sdk-android-sherpa` | Only one artifact published, or wrong version. | The artifacts version independently: `sdk-android` is `0.6.0-SNAPSHOT`, `sdk-android-sherpa` is `0.4.0-SNAPSHOT`. Publish both. |
+| `Could not resolve com.medtroniclabs.microcoaching:sdk-android:0.7.0-SNAPSHOT` | Artifacts not in Maven Local. | Run `./gradlew :sdk-android:publishToMavenLocal` in the SDK repo (and `:sdk-android-sherpa:publishToMavenLocal` if used). See [01 — Step 1](./01-setup.md#step-1--build--publish-the-sdk-to-maven-local). |
+| Resolves `sdk-android` but not `sdk-android-sherpa` | Only one artifact published, or wrong version. | The artifacts version independently: `sdk-android` is `0.7.0-SNAPSHOT`, `sdk-android-sherpa` is `0.4.0-SNAPSHOT`. Publish both. |
 | `UnsatisfiedLinkError` / missing `.so` at runtime, or a much larger APK than expected | Compressed native ML runtimes not extracted. | Set `packaging { jniLibs { useLegacyPackaging = true } }`. See [01 — Step 5b](./01-setup.md#step-5b--host-build-file-additions). |
 | `Module was compiled with an incompatible version of Kotlin` | Host Kotlin older than the SDK's 2.1.x. | Add `freeCompilerArgs += "-Xskip-metadata-version-check"`. See [01 — Step 5b](./01-setup.md#step-5b--host-build-file-additions). |
 | `mavenLocal()` ignored / artifact still not found | `mavenLocal()` missing or after other repos. | Add `mavenLocal()` as the **first** entry under `dependencyResolutionManagement.repositories`. See [01 — Step 2](./01-setup.md#step-2--add-mavenlocal-to-the-repositories). |

@@ -1,6 +1,6 @@
 # 05 — Model Download & Voice
 
-**Version:** 0.6.0-SNAPSHOT · **Date:** 2026-08-31 · **Status:** Draft
+**Version:** 0.7.0-SNAPSHOT · **Date:** 2026-08-31 · **Status:** Draft
 
 The on-device LLM (Gemma) powers the chat. It is downloaded at runtime, not bundled in the APK. This page covers download strategies, the `ModelManager` API, the download-consent UI, low-end-device behaviour, and voice/STT.
 

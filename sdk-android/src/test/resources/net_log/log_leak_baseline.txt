@@ -1,0 +1,56 @@
+AndroidSpeechRecognizerEngine.kt|bare throwable in template|2
+AndroidSpeechRecognizerEngine.kt|exception or response message|4
+AndroidSpeechRecognizerEngine.kt|throwable argument|2
+AssetSyncApi.kt|exception or response message|2
+AssetSyncApi.kt|throwable argument|1
+ChatBackendAnswerer.kt|exception or response message|1
+ChatBackendAnswerer.kt|throwable argument|1
+ChatKnowledgeIndexBootstrap.kt|exception or response message|1
+ChatSuggestionsRepository.kt|exception or response message|1
+ChatViewModel.kt|exception or response message|4
+ChatViewModel.kt|throwable argument|1
+ChatVoiceInputController.kt|exception or response message|2
+ChwContextStore.kt|exception or response message|3
+CoachingAnalytics.kt|exception or response message|2
+DetectionRuleEnvelope.kt|exception or response message|1
+DocumentPreviewActivity.kt|URL-like value|2
+DocumentPreviewActivity.kt|exception or response message|4
+EventRecorder.kt|exception or response message|1
+GapRuleDispatcher.kt|exception or response message|3
+InboundSyncWorker.kt|exception or response message|1
+InferenceRouter.kt|exception or response message|1
+InferenceRouter.kt|throwable argument|1
+LearnViewModel.kt|exception or response message|1
+LearnViewModel.kt|throwable argument|1
+LessonCardsJsonParser.kt|exception or response message|2
+MicroCoachingSDK.kt|URL-like value|1
+MicroCoachingSDK.kt|exception or response message|13
+MicroCoachingSDK.kt|throwable argument|1
+ModelDownloadWorker.kt|URL-like value|2
+ModelDownloadWorker.kt|response headers|1
+ModelManager.kt|bare throwable in template|1
+ModelManager.kt|exception or response message|2
+ModulesSyncApi.kt|exception or response message|2
+ModulesSyncApi.kt|throwable argument|1
+MorningModuleResolver.kt|exception or response message|1
+NetworkModule.kt|URL-like value|1
+OnDeviceMorningGenerator.kt|URL-like value|1
+OnDeviceTranslator.kt|exception or response message|3
+OutboundSyncApi.kt|exception or response message|2
+OutboundSyncApi.kt|throwable argument|1
+PatientSnapshotBuilder.kt|exception or response message|1
+PdfPagerScreen.kt|exception or response message|4
+QuizJsonParser.kt|exception or response message|2
+ReferralSubmittedHandler.kt|exception or response message|1
+SdkNetworkMonitor.kt|exception or response message|1
+SpiceReferralComplianceEvaluator.kt|exception or response message|1
+SttModelDownloadWorker.kt|exception or response message|3
+SttModelDownloadWorker.kt|message held in a local|1
+SttModelManager.kt|bare throwable in template|1
+SyncApi.kt|exception or response message|2
+SyncApi.kt|throwable argument|1
+TrainingVideosViewModel.kt|exception or response message|1
+VideoDurationProbe.kt|exception or response message|2
+VideoProgressReporter.kt|exception or response message|6
+VisitCompletedHandler.kt|exception or response message|1
+VisitCompletedHandler.kt|throwable argument|1

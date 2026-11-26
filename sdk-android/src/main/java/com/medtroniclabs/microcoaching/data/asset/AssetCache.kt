@@ -5,9 +5,14 @@ import android.os.StatFs
 import android.system.ErrnoException
 import android.system.OsConstants
 import android.util.Log
+import androidx.annotation.VisibleForTesting
+import com.medtroniclabs.microcoaching.BuildConfig
 import com.medtroniclabs.microcoaching.MicroCoachingSDK
 import com.medtroniclabs.microcoaching.data.db.dao.CachedAssetDao
 import com.medtroniclabs.microcoaching.data.db.entity.CachedAssetEntity
+import com.medtroniclabs.microcoaching.network.events.LogRef
+import com.medtroniclabs.microcoaching.network.events.NetworkEvents
+import com.medtroniclabs.microcoaching.network.events.UrlSanitizer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -67,11 +72,13 @@ class AssetCache(
      * does NOT carry the API auth interceptor — the asset host (S3) differs from
      * the API host and the URL already embeds its signature.
      */
-    private val downloadClient: OkHttpClient by lazy {
-        OkHttpClient.Builder()
-            .connectTimeout(30, TimeUnit.SECONDS)
-            .readTimeout(60, TimeUnit.SECONDS)
-            .build()
+    @VisibleForTesting
+    internal val downloadClient: OkHttpClient by lazy {
+        NetworkEvents.instrument(
+            OkHttpClient.Builder()
+                .connectTimeout(30, TimeUnit.SECONDS)
+                .readTimeout(60, TimeUnit.SECONDS),
+        ).build()
     }
 
     private val cacheDir: File by lazy {
@@ -119,10 +126,12 @@ class AssetCache(
             return null
         }
         val keyHash = sha256(key)
-        Log.d(TAG, "localFile(kind=$kind key=$key)")
+        // Logs carry this short reference, never the key (an object URL).
+        val ref = LogRef.fromDigest(keyHash)
+        Log.d(TAG, "localFile(kind=$kind ref=$ref)")
 
         cachedFile(keyHash)?.let {
-            Log.d(TAG, "cache HIT key=$key -> ${it.name}")
+            Log.d(TAG, "cache HIT ref=$ref")
             return it
         }
 
@@ -132,17 +141,17 @@ class AssetCache(
             cachedFile(keyHash)?.let { return it }
 
             if (!isOnline()) {
-                Log.d(TAG, "offline miss for key=$key")
+                Log.d(TAG, "offline miss for ref=$ref")
                 return null
             }
             val url = runCatching { fetchUrl() }
-                .onFailure { Log.w(TAG, "fetchUrl threw for key=$key: ${it.message}", it) }
+                .onFailure { Log.w(TAG, "fetchUrl threw for ref=$ref: ${it::class.java.name}") }
                 .getOrNull()
             if (url.isNullOrBlank()) {
-                Log.w(TAG, "no URL resolved for key=$key — cannot cache (fetchUrl returned null/blank)")
+                Log.w(TAG, "no URL resolved for ref=$ref — cannot cache (fetchUrl returned null/blank)")
                 return null
             }
-            Log.d(TAG, "resolved url for key=$key host=${url.toHttpUrlOrNull()?.host} path=${url.toHttpUrlOrNull()?.encodedPath}")
+            if (BuildConfig.DEBUG) Log.d(TAG, "resolved url for ref=$ref url=${UrlSanitizer.sanitize(url)}")
             downloadAndStore(keyHash, key, kind, url, onProgress)?.let { return it }
 
             // The download failed on a URL something was willing to hand us, which
@@ -151,14 +160,14 @@ class AssetCache(
             // so a stale URL self-heals instead of leaving a permanent blank.
             val renewed = renewUrl?.let { renew ->
                 runCatching { renew() }
-                    .onFailure { Log.w(TAG, "renewUrl threw for key=$key: ${it.message}", it) }
+                    .onFailure { Log.w(TAG, "renewUrl threw for ref=$ref: ${it::class.java.name}") }
                     .getOrNull()
             }
             if (renewed.isNullOrBlank() || renewed == url) {
-                if (renewed == url) Log.d(TAG, "renewUrl returned the same URL for key=$key — not retrying")
+                if (renewed == url) Log.d(TAG, "renewUrl returned the same URL for ref=$ref — not retrying")
                 return null
             }
-            Log.i(TAG, "retrying download for key=$key with a re-signed URL")
+            Log.i(TAG, "retrying download for ref=$ref with a re-signed URL")
             return downloadAndStore(keyHash, key, kind, renewed, onProgress)
         }
     }
@@ -219,8 +228,10 @@ class AssetCache(
             renewUrl = renewUrl,
             fetchUrl = fetchUrl,
         ) ?: return null
-        runCatching { dao.setPinned(sha256(key), true) }
-            .onFailure { Log.w(TAG, "pin failed for key=$key: ${it.message}") }
+        val keyHash = sha256(key)
+        val ref = LogRef.fromDigest(keyHash)
+        runCatching { dao.setPinned(keyHash, true) }
+            .onFailure { Log.w(TAG, "pin failed for ref=$ref: ${it::class.java.name}") }
         return file
     }
 
@@ -232,10 +243,11 @@ class AssetCache(
     suspend fun remove(key: String) {
         if (key.isBlank()) return
         val keyHash = sha256(key)
+        val ref = LogRef.fromDigest(keyHash)
         val row = dao.get(keyHash) ?: return
         runCatching { File(row.localPath).delete() }
         dao.delete(keyHash)
-        Log.d(TAG, "removed cached asset key=$key")
+        Log.d(TAG, "removed cached asset ref=$ref")
     }
 
     /** Stable key from a URL: scheme+host+path, dropping the volatile query. */
@@ -265,6 +277,7 @@ class AssetCache(
         url: String,
         onProgress: ((downloaded: Long, total: Long) -> Unit)? = null,
     ): File? = withContext(Dispatchers.IO) {
+        val ref = LogRef.fromDigest(keyHash)
         val dir = File(cacheDir, kind.name.lowercase()).apply { mkdirs() }
         val target = File(dir, keyHash)
         val tmp = File(dir, "$keyHash.tmp")
@@ -274,8 +287,7 @@ class AssetCache(
                 if (!response.isSuccessful) {
                     Log.w(
                         TAG,
-                        "download failed code=${response.code} key=$key " +
-                            "body=${response.body?.string()?.take(200)}",
+                        "download failed code=${response.code} ref=$ref",
                     )
                     return@withContext null
                 }
@@ -288,7 +300,7 @@ class AssetCache(
                 // generic catch below rethrows it.
                 val incoming = body.contentLength().coerceAtLeast(0L)
                 if (!hasHeadroomFor(incoming)) {
-                    Log.w(TAG, "Refusing download key=$key — below ${minFreeBytes}B free-space floor (incoming=$incoming)")
+                    Log.w(TAG, "Refusing download ref=$ref — below ${minFreeBytes}B free-space floor (incoming=$incoming)")
                     throw InsufficientStorageException()
                 }
                 if (onProgress == null) {
@@ -311,24 +323,24 @@ class AssetCache(
                         mime = mime,
                     ),
                 )
-                Log.d(TAG, "cached key=$key bytes=${target.length()} -> ${target.name}")
+                Log.d(TAG, "cached ref=$ref bytes=${target.length()}")
             }
             evictIfNeeded()
             target
         } catch (e: IOException) {
             runCatching { tmp.delete() }
             if (e.isStorageFull()) {
-                Log.w(TAG, "insufficient storage for key=$key — cannot cache asset")
+                Log.w(TAG, "insufficient storage for ref=$ref — cannot cache asset")
                 throw InsufficientStorageException(e)
             }
-            Log.w(TAG, "download IO error for key=$key: ${e.message}", e)
+            Log.w(TAG, "download IO error for ref=$ref: ${e::class.java.name}")
             null
         } catch (e: Exception) {
             runCatching { tmp.delete() }
             // Propagate the proactive free-space refusal so callers can show the
             // storage-specific message (it isn't an IOException, so it lands here).
             if (e is InsufficientStorageException) throw e
-            Log.w(TAG, "download error for key=$key: ${e.message}", e)
+            Log.w(TAG, "download error for ref=$ref: ${e::class.java.name}")
             null
         }
     }
@@ -394,8 +406,11 @@ class AssetCache(
         keyLocks.getOrPut(keyHash) { Mutex() }
     }
 
-    private fun isOnline(): Boolean =
+    /** Connectivity check before a download; replaceable so tests can run without an SDK instance. */
+    @VisibleForTesting
+    internal var isOnline: () -> Boolean = {
         runCatching { MicroCoachingSDK.getInstance().isNetworkAvailable() }.getOrDefault(false)
+    }
 
     /**
      * True when writing [incomingBytes] would still leave at least [minFreeBytes]

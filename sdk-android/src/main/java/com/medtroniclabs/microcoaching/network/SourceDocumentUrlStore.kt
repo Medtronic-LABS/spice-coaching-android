@@ -96,11 +96,12 @@ internal object SourceDocumentUrlStore {
             val body = response.body()
             val entry = body?.urls?.firstOrNull { it.storagePath == storagePath }
             if (entry == null || entry.presignedUrl.isBlank()) {
-                Log.w(TAG, "Re-sign declined for $id (missing_paths=${body?.missingPaths})")
+                val declined = body?.missingPaths?.size ?: 0
+                Log.w(TAG, "Re-sign declined for $id (declined=$declined)")
                 return@runCatching null
             }
             entry.presignedUrl
-        }.onFailure { Log.w(TAG, "Re-sign error for $id: ${it.message}", it) }.getOrNull()
+        }.onFailure { Log.w(TAG, "Re-sign error for $id: ${it::class.java.name}") }.getOrNull()
     }
 
     private fun fresh(url: String?, expiresAt: Long?, nowSec: Long): PresignedRef? {

@@ -1,6 +1,6 @@
 # 04 — Workflow Hooks & Data
 
-**Version:** 0.6.0-SNAPSHOT · **Date:** 2026-08-31 · **Status:** Draft
+**Version:** 0.7.0-SNAPSHOT · **Date:** 2026-08-31 · **Status:** Draft
 
 How SPICE feeds clinical-workflow events into the SDK, and how it reads SDK-owned data back out. The SDK keeps its own `microcoaching.db` Room database fully separate from SPICE's database — these hooks and interfaces are the entire data boundary.
 

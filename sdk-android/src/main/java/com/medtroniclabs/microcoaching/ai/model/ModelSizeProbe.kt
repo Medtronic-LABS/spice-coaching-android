@@ -2,6 +2,8 @@ package com.medtroniclabs.microcoaching.ai.model
 
 import android.content.Context
 import android.util.Log
+import androidx.annotation.VisibleForTesting
+import com.medtroniclabs.microcoaching.network.events.NetworkEvents
 import com.medtroniclabs.microcoaching.util.PrefsNames
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -37,11 +39,13 @@ internal object ModelSizeProbe {
     /** Sanity floor — a "size" below this is a pointer file or an error page, not a model. */
     private const val MIN_PLAUSIBLE_BYTES = 1_000_000L
 
-    private val client: OkHttpClient by lazy {
-        OkHttpClient.Builder()
-            .connectTimeout(10, TimeUnit.SECONDS)
-            .readTimeout(10, TimeUnit.SECONDS)
-            .build()
+    @VisibleForTesting
+    internal val client: OkHttpClient by lazy {
+        NetworkEvents.instrument(
+            OkHttpClient.Builder()
+                .connectTimeout(10, TimeUnit.SECONDS)
+                .readTimeout(10, TimeUnit.SECONDS),
+        ).build()
     }
 
     /** Last size resolved for [variant], or null if we've never successfully probed it. */
@@ -102,7 +106,8 @@ internal object ModelSizeProbe {
         return resolved
     }
 
-    private fun probe(variant: ModelVariant, hfToken: String): Long? =
+    @VisibleForTesting
+    internal fun probe(variant: ModelVariant, hfToken: String): Long? =
         runCatching { headSize(variant, hfToken) }.getOrNull()
             ?: runCatching { rangedSize(variant, hfToken) }.getOrNull()
 

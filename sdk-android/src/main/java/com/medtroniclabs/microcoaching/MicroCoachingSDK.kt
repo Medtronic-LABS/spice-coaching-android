@@ -27,6 +27,9 @@ import com.medtroniclabs.microcoaching.progress.moduleIdList
 import com.medtroniclabs.microcoaching.progress.buildModuleCompletion
 import com.medtroniclabs.microcoaching.sdk.chat.ChatKnowledgeIndexBootstrap
 import com.medtroniclabs.microcoaching.sdk.context.ChwContextStore
+import com.medtroniclabs.microcoaching.sdk.diagnostics.NetworkEventsClearResult
+import com.medtroniclabs.microcoaching.sdk.diagnostics.NetworkEventsReader
+import com.medtroniclabs.microcoaching.sdk.diagnostics.NetworkEventsResult
 import com.medtroniclabs.microcoaching.ui.theme.CoachingColors
 import com.medtroniclabs.microcoaching.ui.theme.coachingTypography
 import com.medtroniclabs.microcoaching.sdk.hooks.handleAssessmentSubmitted
@@ -57,6 +60,7 @@ import com.medtroniclabs.microcoaching.ai.translation.OnDeviceTranslator
 import com.medtroniclabs.microcoaching.domain.decision.CoachingMode
 import com.medtroniclabs.microcoaching.network.CoachingApiService
 import com.medtroniclabs.microcoaching.network.NetworkModule
+import com.medtroniclabs.microcoaching.network.events.NetworkEventRecorder
 import com.medtroniclabs.microcoaching.sdk.CoachingDataRepository
 import com.medtroniclabs.microcoaching.sdk.MicroCoachingDataCallback
 import com.medtroniclabs.microcoaching.sdk.SdkDataExport
@@ -588,6 +592,8 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
     )
 
     init {
+        // Idempotent; covers hosts that remove the App Startup initializer.
+        NetworkEventRecorder.bind(config.context)
         if (config.backendUrl.isNotBlank()) {
             // On a destructive Room migration, clear inbound watermarks so the next
             // pull returns a full snapshot — else the prefs watermark outlives the
@@ -1537,5 +1543,28 @@ class MicroCoachingSDK private constructor(val config: MicroCoachingConfig) {
 
         /** Returns true if the SDK has been initialized. */
         fun isInitialized(): Boolean = instance != null
+
+        private val networkEvents = NetworkEventsReader(::isInitialized, NetworkEventRecorder)
+
+        /**
+         * Stored SDK network events with an id above [afterId], ascending, at most
+         * [limit] (clamped to 1..500; a negative [afterId] reads from the start).
+         * Never throws; runs its I/O on a background dispatcher. It may wait
+         * behind database work (opening the database, an SDK write), so callers
+         * should wrap it in `withTimeout`; the SDK sets no timeout of its own.
+         */
+        suspend fun getNetworkEvents(afterId: Long, limit: Int): NetworkEventsResult =
+            networkEvents.read(afterId, limit)
+
+        /**
+         * Deletes every stored network event, e.g. on a user switch, and discards
+         * events still queued. Works before [isInitialized] once the store is bound
+         * at process start. Never throws. It may wait behind database work, so
+         * callers should wrap it in `withTimeout`; the SDK sets no timeout of its
+         * own. A timeout or cancel only makes the delete finish later: once
+         * called, it is never left undone, and events from calls already in
+         * flight are discarded.
+         */
+        suspend fun clearNetworkEvents(): NetworkEventsClearResult = networkEvents.clear()
     }
 }
