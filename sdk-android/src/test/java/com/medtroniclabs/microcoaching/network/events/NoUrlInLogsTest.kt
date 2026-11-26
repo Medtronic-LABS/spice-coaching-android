@@ -62,7 +62,7 @@ class NoUrlInLogsTest {
             assertTrue(n, flagged("Log.d(TAG, \"x \${$n.trim()}\")"))
         }
         assertEquals(false, flagged("Log.d(TAG, \"x \${UrlSanitizer.sanitize(url)}\")"))
-        assertEquals(false, flagged("Log.d(TAG, \"x \${UrlSanitizer.sanitize(a.b(url))}\")"))
+        assertEquals(false, flagged("Log.d(TAG, \"x \${UrlSanitizer.sanitize(a.b(c), url)}\")"))
     }
 
     @Test fun flagsTrailingIdentifierThrowable() {
@@ -90,19 +90,46 @@ class NoUrlInLogsTest {
         assertTrue(flagged("Log.w(TAG, \"h \${resp.headers}\")"))
     }
 
+    @Test fun flagsUrlishNamesOutsideTemplates() {
+        assertTrue(flagged("Log.d(TAG, resolved.url)"))
+        assertTrue(flagged("Log.d(TAG, \"x \" + url)"))
+        assertTrue(flagged("Log.d(TAG, \"x \$renewed\")"))
+        assertTrue(flagged("Log.d(TAG, \"x \" + renewed)"))
+        assertTrue(flagged("Log.d(TAG, \"x \" + entry.presignedUrl)"))
+        assertTrue(flagged("Log.d(TAG, \"x \" + signed_url)"))
+        assertEquals(false, flagged("Log.d(TAG, \"x \" + during + security + curl)"))
+        assertEquals(false, flagged("Log.d(TAG, \"fetchUrl returned a link to the src\")"))
+    }
+
+    @Test fun flagsAnyFinalIdentifierArgument() {
+        assertTrue(flagged("Log.w(TAG, msg, e)"))
+        assertTrue(flagged("Log.w(TAG, buildMsg(), e)"))
+        assertTrue(flagged("Log.w(TAG, \"x\" + y, e)"))
+        assertTrue(flagged("Log.w(TAG, \"x\" + y, error)"))
+    }
+
+    @Test fun flagsCauseAndVarMessageLocal() {
+        assertTrue(flagged("Log.w(TAG, \"x \${e.cause}\")"))
+        val src = "fun f() {\n    var m = e.message\n    Log.w(TAG, \"x \$m\")\n}\n"
+        assertTrue(scan("Synthetic.kt", src).isNotEmpty())
+    }
+
     private val logStart = Regex("""\b(?:Log|Timber)\.(?:[divwe]|wtf)\(""")
     private val sanitizeStart = Regex("""UrlSanitizer\.sanitize\(""")
-    private val messageLocal = Regex("""\bval\s+(\w+)\s*=[^\n]*\.(?:message|localizedMessage)\b""")
+    private val messageLocal = Regex("""\b(?:val|var)\s+(\w+)\s*=[^\n]*\.(?:message|localizedMessage)\b""")
     private val throwableNames = "e|ex|err|error|exception|throwable|cause|it|t"
-    private val urlish = Regex("(?i)url|uri|link|src|href")
+    private val urlWords = setOf("url", "urls", "uri", "uris", "link", "links", "src", "href")
+    private val urlNames = setOf("renewed")
+    private val identifier = Regex("""[A-Za-z_]\w*""")
+    private val nameSegment = Regex("""[A-Z]+(?![a-z])|[A-Z]?[a-z]+|\d+""")
 
     private val rules = listOf(
         "bare throwable in template" to
             Regex("""\$(?:$throwableNames)\b|\$\{\s*(?:$throwableNames)\s*\}"""),
-        "exception or response message" to Regex("""\.message\b|localizedMessage|\.toString\(\)"""),
+        "exception or response message" to Regex("""\.message\b|\.cause\b|localizedMessage|\.toString\(\)"""),
         "response or error body" to Regex("""\bbody=|errorBody|response\.body|\.string\(\)"""),
         "response headers" to Regex("""\bheaders\b"""),
-        "throwable argument" to Regex(""""\s*,\s*[A-Za-z_]\w*\s*,?\s*\)\z"""),
+        "throwable argument" to Regex(""",\s*[A-Za-z_]\w*\s*,?\s*\)\z"""),
     )
 
     private fun scan(name: String, text: String): List<String> {
@@ -113,8 +140,9 @@ class NoUrlInLogsTest {
             val line = text.substring(0, match.range.first).count { it == '\n' } + 1
             val checked = stripSanitized(call)
             val hits = rules.filter { it.second.containsMatchIn(checked) }.map { it.first }.toMutableList()
-            if (interpolatedIdentifiers(checked).any { urlish.containsMatchIn(it) }) hits += "URL-like value"
-            if (interpolatedIdentifiers(checked).any { it in messageLocals }) hits += "message held in a local"
+            val names = identifier.findAll(codeView(checked)).map { it.value }.toList()
+            if (names.any(::isUrlName)) hits += "URL-like value"
+            if (names.any { it in messageLocals }) hits += "message held in a local"
             hits.forEach { violations += "$name:$line $it: ${call.replace(Regex("""\s+"""), " ")}" }
         }
         return violations
@@ -132,12 +160,46 @@ class NoUrlInLogsTest {
         return sb.append(call, from, call.length).toString()
     }
 
-    /** Identifiers used inside `$name` and `${...}` template expressions. */
-    private fun interpolatedIdentifiers(call: String): List<String> {
-        val ident = Regex("""[A-Za-z_]\w*""")
-        val simple = Regex("""\$([A-Za-z_]\w*)""").findAll(call).map { it.groupValues[1] }
-        val braced = Regex("""\$\{([^}]*)}""").findAll(call).flatMap { ident.findAll(it.groupValues[1]).map { m -> m.value } }
-        return (simple + braced).toList()
+    /** A name is URL-like if it is listed, or any camelCase or snake_case segment is a URL word. */
+    private fun isUrlName(name: String): Boolean =
+        name in urlNames || nameSegment.findAll(name).any { it.value.lowercase() in urlWords }
+
+    /**
+     * The call with string-literal text removed, keeping the code of `$name` and
+     * `${...}` templates, so a name is matched only where it is a value, not in prose.
+     */
+    private fun codeView(text: String): String {
+        val sb = StringBuilder()
+        var i = 0
+        while (i < text.length) {
+            if (text[i] != '"') {
+                sb.append(text[i++])
+                continue
+            }
+            if (text.startsWith("\"\"\"", i)) {
+                i = skipString(text, i)
+                continue
+            }
+            i++
+            while (i < text.length && text[i] != '"') {
+                when {
+                    text[i] == '\\' -> i += 2
+                    text.startsWith("\${", i) -> {
+                        val end = skipBraces(text, i + 1)
+                        sb.append(' ').append(codeView(text.substring(i + 2, end - 1))).append(' ')
+                        i = end
+                    }
+                    text[i] == '$' -> {
+                        val m = identifier.matchAt(text, i + 1)
+                        if (m != null) sb.append(' ').append(m.value).append(' ')
+                        i += 1 + (m?.value?.length ?: 0)
+                    }
+                    else -> i++
+                }
+            }
+            i++
+        }
+        return sb.toString()
     }
 
     /** Text from the `(` at [openIndex] to its closing `)`, ignoring parentheses inside string and char literals. */
