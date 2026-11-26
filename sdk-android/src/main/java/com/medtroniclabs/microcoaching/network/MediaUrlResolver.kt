@@ -1,5 +1,6 @@
 package com.medtroniclabs.microcoaching.network
 
+import com.medtroniclabs.microcoaching.network.events.LogRef
 import android.util.Log
 import com.medtroniclabs.microcoaching.MicroCoachingSDK
 import com.medtroniclabs.microcoaching.network.events.UrlSanitizer
@@ -52,22 +53,23 @@ object MediaUrlResolver {
             return null
         }
 
+        val ref = LogRef.of(key)
         if (!forceFresh) {
             mutex.withLock { cache[key] }
                 ?.takeIf { it.expiresAtEpochSec > nowEpochSec() }
                 ?.let {
-                    Log.d(TAG, "resolve: cache hit object_name=$key")
+                    Log.d(TAG, "resolve: cache hit ref=$ref")
                     return it.url
                 }
         }
 
         val sdk = runCatching { MicroCoachingSDK.getInstance() }.getOrNull()
         if (sdk == null) {
-            Log.w(TAG, "SDK not initialised — cannot resolve media object_name=$key")
+            Log.w(TAG, "SDK not initialised — cannot resolve media ref=$ref")
             return null
         }
         if (!sdk.isNetworkAvailable()) {
-            Log.w(TAG, "resolve: network unavailable — cannot resolve object_name=$key")
+            Log.w(TAG, "resolve: network unavailable — cannot resolve ref=$ref")
             return null
         }
 
@@ -87,18 +89,18 @@ object MediaUrlResolver {
                 // bucket-relative `object_name` while the endpoint wants a
                 // bucket-prefixed storage path, so these land here until the
                 // backend either accepts one or ships the other.
-                Log.w(TAG, "Media presign declined object_name=$key (missing_paths=${body?.missingPaths})")
+                Log.w(TAG, "Media presign declined ref=$ref (missing_paths=${body?.missingPaths})")
                 return@runCatching null
             }
             CachedUrl(
                 url = entry.presignedUrl,
                 expiresAtEpochSec = nowEpochSec() + (entry.expiresSeconds - EXPIRY_SAFETY_MARGIN_SEC).coerceAtLeast(0),
             )
-        }.onFailure { Log.w(TAG, "Media presign error for $key: ${it::class.java.name}") }.getOrNull()
+        }.onFailure { Log.w(TAG, "Media presign error for ref=$ref: ${it::class.java.name}") }.getOrNull()
             ?: return null
 
         mutex.withLock { cache[key] = resolved }
-        Log.d(TAG, "resolve: resolved object_name=$key")
+        Log.d(TAG, "resolve: resolved ref=$ref")
         return resolved.url
     }
 

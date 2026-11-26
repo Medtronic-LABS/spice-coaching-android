@@ -82,6 +82,7 @@ class NoUrlInLogsTest {
 
     @Test fun matchesWtfAndIgnoresParenthesesInsideStrings() {
         assertTrue(flagged("Log.wtf(TAG, \"x \$url\")"))
+        assertTrue(flagged("Log.d(TAG, \"cache HIT key=\$key\")"))
         assertTrue(flagged("Log.w(TAG, \"oops ) here \${e.message}\")"))
         assertTrue(flagged("Log.w(TAG, \"( open\", e)"))
         assertEquals(false, flagged("Log.w(TAG, \"lone ) paren\")"))
@@ -121,7 +122,7 @@ class NoUrlInLogsTest {
     private val messageLocal = Regex("""\b(?:val|var)\s+(\w+)\s*=[^\n]*\.(?:message|localizedMessage)\b""")
     private val throwableNames = "e|ex|err|error|exception|throwable|cause|it|t"
     private val urlWords = setOf("url", "urls", "uri", "uris", "link", "links", "src", "href")
-    private val urlNames = setOf("renewed")
+    private val urlNames = setOf("renewed", "key")
     private val identifier = Regex("""[A-Za-z_]\w*""")
     private val nameSegment = Regex("""[A-Z]+(?![a-z])|[A-Z]?[a-z]+|\d+""")
 
