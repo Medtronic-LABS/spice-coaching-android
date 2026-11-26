@@ -3,6 +3,7 @@ package com.medtroniclabs.microcoaching.network.events
 import java.io.InterruptedIOException
 import java.net.SocketException
 import java.net.UnknownHostException
+import java.security.cert.CertPathValidatorException
 import java.security.cert.CertificateException
 import java.util.Collections
 import java.util.IdentityHashMap
@@ -28,15 +29,20 @@ internal object NetworkErrorClassifier {
         else -> NetworkErrorType.UNKNOWN
     }
 
+    /**
+     * An untrusted chain surfaces as a [CertificateException] cause on the JVM
+     * and can surface as a [CertPathValidatorException] cause on Android
+     * (Conscrypt), so either marks a handshake failure as a bad certificate.
+     */
     private fun isBadCertificate(error: Throwable): Boolean =
         error is SSLPeerUnverifiedException ||
-            (error is SSLHandshakeException && causeChainHasCertificateException(error))
+            (error is SSLHandshakeException && causeChainHasCertificateFailure(error))
 
-    private fun causeChainHasCertificateException(error: Throwable): Boolean {
+    private fun causeChainHasCertificateFailure(error: Throwable): Boolean {
         val seen = Collections.newSetFromMap(IdentityHashMap<Throwable, Boolean>())
         var current: Throwable? = error.cause
         while (current != null && seen.add(current)) {
-            if (current is CertificateException) return true
+            if (current is CertificateException || current is CertPathValidatorException) return true
             current = current.cause
         }
         return false

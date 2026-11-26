@@ -10,10 +10,14 @@ internal object NetworkEvents {
      * far and [ConnectionProbe] as a network interceptor. Call it immediately
      * before `build()`. The sink is read from [NetworkEventSinkHolder] on every
      * call, so a client built before the store is bound starts recording once it is.
+     * A builder that is already instrumented is returned unchanged, so a
+     * `newBuilder()` of an instrumented client never records a call twice.
      */
-    fun instrument(b: OkHttpClient.Builder): OkHttpClient.Builder =
-        b.addInterceptor(NetworkEventInterceptor({ NetworkEventSinkHolder.current() }))
+    fun instrument(b: OkHttpClient.Builder): OkHttpClient.Builder {
+        if (b.interceptors().any { it is NetworkEventInterceptor }) return b
+        return b.addInterceptor(NetworkEventInterceptor({ NetworkEventSinkHolder.current() }))
             .addNetworkInterceptor(ConnectionProbe)
+    }
 }
 
 /** The process-wide sink that instrumented clients write to; null until the store binds. */

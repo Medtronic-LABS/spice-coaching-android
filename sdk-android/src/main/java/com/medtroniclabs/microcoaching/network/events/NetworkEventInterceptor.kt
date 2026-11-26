@@ -1,5 +1,6 @@
 package com.medtroniclabs.microcoaching.network.events
 
+import okhttp3.Call
 import okhttp3.Interceptor
 import okhttp3.Request
 import okhttp3.Response
@@ -10,7 +11,8 @@ import java.util.concurrent.atomic.AtomicLong
  * Application interceptor that records one [NetworkEventRow] per call: the
  * requested URL (sanitised here, on the calling thread), the final status and
  * the time to response headers, or the classified failure. Responses served
- * wholly from cache are not recorded.
+ * wholly from cache are not recorded. A cache entry revalidated by a 304 is
+ * logged with the code the caller sees, 200, not the 304 on the wire.
  *
  * It calls `chain.proceed` exactly once and always returns the original
  * response or rethrows the original exception. It never reads headers, bodies,
@@ -23,32 +25,29 @@ internal class NetworkEventInterceptor(
 
     private val dropped = AtomicLong()
 
-    /** Rows lost because building or offering them threw. */
+    /** Rows lost because reading the clock, building or offering them threw. */
     val droppedCount: Long get() = dropped.get()
 
     override fun intercept(chain: Interceptor.Chain): Response {
         val request = chain.request()
         val call = chain.call()
-        val startedAtMs = clock.wallMs()
-        val t0 = clock.monoNs()
+        val start = start()
         try {
             val response = try {
                 chain.proceed(request)
             } catch (e: IOException) {
-                record(request, startedAtMs, t0, statusCode = null) {
-                    NetworkErrorClassifier.classify(e, ConnectionProbe.isConnected(call), call.isCanceled())
-                }
+                recordFailure(request, start, call, e)
                 throw e
             } catch (e: RuntimeException) {
-                record(request, startedAtMs, t0, statusCode = null) { NetworkErrorType.UNKNOWN }
+                recordFailure(request, start, call, e)
                 throw e
             }
             if (response.networkResponse != null) {
                 val code = response.code
                 if (code in VALID_STATUS) {
-                    record(request, startedAtMs, t0, statusCode = code) { null }
+                    record(request, start, statusCode = code) { null }
                 } else {
-                    record(request, startedAtMs, t0, statusCode = null) { NetworkErrorType.UNKNOWN }
+                    record(request, start, statusCode = null) { NetworkErrorType.UNKNOWN }
                 }
             }
             return response
@@ -58,24 +57,47 @@ internal class NetworkEventInterceptor(
     }
 
     /**
+     * Reads the start time. The broad catch is a deliberate boundary for the
+     * same reason as in [record]: if the injected clock throws, timing falls
+     * back to [NetworkClock.System] for the whole call instead of failing it.
+     */
+    private fun start(): Start = try {
+        Start(clock.wallMs(), clock.monoNs(), clock)
+    } catch (e: Exception) {
+        systemStart()
+    } catch (e: LinkageError) {
+        systemStart()
+    }
+
+    private fun systemStart(): Start =
+        Start(NetworkClock.System.wallMs(), NetworkClock.System.monoNs(), NetworkClock.System)
+
+    private fun recordFailure(request: Request, start: Start, call: Call, error: Exception) {
+        record(request, start, statusCode = null) {
+            NetworkErrorClassifier.classify(error, ConnectionProbe.isConnected(call), call.isCanceled())
+        }
+    }
+
+    /**
      * Builds and offers one row. The broad catch is a deliberate boundary:
      * recording must never fail, delay or change the call it observes, so any
-     * runtime failure in the sink or while building the row only bumps
-     * [droppedCount]. Nothing is logged, so no URL or message can leak.
+     * exception (checked ones included, which Kotlin sinks may throw) or
+     * linkage error from the clock, the sink provider, the sink or while
+     * building the row only bumps [droppedCount]. [VirtualMachineError] is
+     * left to propagate. Nothing is logged, so no URL or message can leak.
      */
     private inline fun record(
         request: Request,
-        startedAtMs: Long,
-        t0: Long,
+        start: Start,
         statusCode: Int?,
         errorType: () -> NetworkErrorType?,
     ) {
         try {
-            val durationMs = ((clock.monoNs() - t0) / NANOS_PER_MILLI).coerceAtLeast(0L)
+            val durationMs = ((start.clock.monoNs() - start.t0) / NANOS_PER_MILLI).coerceAtLeast(0L)
             val sink = sinkProvider() ?: return
             sink.offer(
                 NetworkEventRow(
-                    startedAtMs = startedAtMs,
+                    startedAtMs = start.wallMs,
                     method = request.method,
                     url = UrlSanitizer.sanitize(request.url.toString()),
                     statusCode = statusCode,
@@ -83,10 +105,15 @@ internal class NetworkEventInterceptor(
                     errorType = errorType(),
                 ),
             )
-        } catch (e: RuntimeException) {
+        } catch (e: Exception) {
+            dropped.incrementAndGet()
+        } catch (e: LinkageError) {
             dropped.incrementAndGet()
         }
     }
+
+    /** When a call started, and the clock that took the reading (so the duration uses the same source). */
+    private class Start(val wallMs: Long, val t0: Long, val clock: NetworkClock)
 
     private companion object {
         val VALID_STATUS = 100..599

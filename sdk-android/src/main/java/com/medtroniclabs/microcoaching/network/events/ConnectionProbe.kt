@@ -1,5 +1,6 @@
 package com.medtroniclabs.microcoaching.network.events
 
+import androidx.annotation.VisibleForTesting
 import okhttp3.Call
 import okhttp3.Interceptor
 import okhttp3.Response
@@ -41,5 +42,6 @@ internal object ConnectionProbe : Interceptor {
     }
 
     /** Calls currently marked; for leak tests. */
+    @VisibleForTesting
     fun pendingCount(): Int = connected.size
 }

@@ -10,6 +10,7 @@ import java.net.SocketException
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
 import java.security.cert.CertificateException
+import java.security.cert.CertPathValidatorException
 import java.security.cert.CertificateExpiredException
 import javax.net.ssl.SSLException
 import javax.net.ssl.SSLHandshakeException
@@ -52,6 +53,17 @@ class NetworkErrorClassifierTest {
 
         val deep = SSLHandshakeException("x").apply {
             initCause(RuntimeException(CertificateExpiredException()))
+        }
+        assertEquals(NetworkErrorType.BAD_CERTIFICATE, classify(deep))
+    }
+
+    @Test
+    fun handshakeWithCertPathValidatorCause_isBadCertificate() {
+        val direct = SSLHandshakeException("x").apply { initCause(CertPathValidatorException()) }
+        assertEquals(NetworkErrorType.BAD_CERTIFICATE, classify(direct))
+
+        val deep = SSLHandshakeException("x").apply {
+            initCause(RuntimeException(CertPathValidatorException()))
         }
         assertEquals(NetworkErrorType.BAD_CERTIFICATE, classify(deep))
     }

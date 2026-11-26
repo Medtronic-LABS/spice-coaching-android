@@ -375,6 +375,21 @@ class NetworkEventInterceptorTest {
         assertNull(row.statusCode)
     }
 
+    @Test
+    fun runtimeFailureOnACanceledCall_isCancel() {
+        val thrown = IllegalStateException()
+        val client = builder().addInterceptor { chain -> chain.call().cancel(); throw thrown }.build()
+
+        try {
+            client.newCall(Request.Builder().url("http://api.example.test/").build()).execute().close()
+            fail("expected the runtime exception")
+        } catch (e: IllegalStateException) {
+            assertSame(thrown, e)
+        }
+
+        assertEquals(NetworkErrorType.CANCEL, singleRow().errorType)
+    }
+
     // --- never fails or changes a call -------------------------------------
 
     @Test
@@ -400,6 +415,99 @@ class NetworkEventInterceptorTest {
             .build()
 
         assertSame(thrown, expectFailure(client, Request.Builder().url("http://api.example.test/").build()))
+    }
+
+    @Test
+    fun sinkThrowingCheckedException_stillReturnsTheResponseWithItsBody() {
+        server.enqueue(MockResponse().setBody("intact"))
+        server.start()
+        val interceptor = NetworkEventInterceptor({ NetworkEventSink { throw IOException() } }, clock)
+        val client = OkHttpClient.Builder().addInterceptor(interceptor).addNetworkInterceptor(ConnectionProbe).build()
+
+        get(client, server.url("/ok")).use {
+            assertEquals(200, it.code)
+            assertEquals("intact", it.body!!.string())
+        }
+        assertEquals(1L, interceptor.droppedCount)
+    }
+
+    @Test
+    fun sinkThrowingCheckedException_stillRethrowsTheOriginalFailure() {
+        val thrown = IOException()
+        val interceptor = NetworkEventInterceptor({ NetworkEventSink { throw IOException() } }, clock)
+        val client = OkHttpClient.Builder()
+            .addInterceptor(interceptor)
+            .addInterceptor { throw thrown }
+            .build()
+
+        assertSame(thrown, expectFailure(client, Request.Builder().url("http://api.example.test/").build()))
+        assertEquals(1L, interceptor.droppedCount)
+    }
+
+    @Test
+    fun sinkThrowingLinkageError_stillReturnsTheResponse() {
+        server.enqueue(MockResponse().setBody("intact"))
+        server.start()
+        val interceptor = NetworkEventInterceptor({ NetworkEventSink { throw NoClassDefFoundError() } }, clock)
+        val client = OkHttpClient.Builder().addInterceptor(interceptor).build()
+
+        get(client, server.url("/ok")).use { assertEquals("intact", it.body!!.string()) }
+        assertEquals(1L, interceptor.droppedCount)
+    }
+
+    @Test
+    fun throwingSinkProvider_neitherFailsNorChangesTheCall() {
+        server.enqueue(MockResponse().setBody("intact"))
+        server.start()
+        val interceptor = NetworkEventInterceptor({ throw IOException() }, clock)
+        val okClient = OkHttpClient.Builder().addInterceptor(interceptor).build()
+
+        get(okClient, server.url("/ok")).use { assertEquals("intact", it.body!!.string()) }
+
+        val thrown = IOException()
+        val failingClient = OkHttpClient.Builder()
+            .addInterceptor(NetworkEventInterceptor({ throw IllegalStateException() }, clock))
+            .addInterceptor { throw thrown }
+            .build()
+        assertSame(thrown, expectFailure(failingClient, Request.Builder().url("http://api.example.test/").build()))
+        assertEquals(1L, interceptor.droppedCount)
+    }
+
+    @Test
+    fun throwingClock_neitherFailsNorChangesTheCall_andStillRecords() {
+        server.enqueue(MockResponse().setBody("intact"))
+        server.start()
+        val broken = object : NetworkClock {
+            override fun wallMs(): Long = throw IllegalStateException()
+            override fun monoNs(): Long = throw IllegalStateException()
+        }
+        val client = OkHttpClient.Builder().addInterceptor(NetworkEventInterceptor({ capture }, broken)).build()
+
+        get(client, server.url("/ok")).use { assertEquals("intact", it.body!!.string()) }
+
+        val row = singleRow()
+        assertEquals(200, row.statusCode)
+        assertTrue(row.startedAtMs > 0L)
+        assertTrue(row.durationMs >= 0L)
+    }
+
+    @Test
+    fun clockThrowingOnlyAtTheEnd_dropsTheRowButKeepsTheCall() {
+        server.enqueue(MockResponse().setBody("intact"))
+        server.start()
+        val readings = AtomicInteger()
+        val failsLate = object : NetworkClock {
+            override fun wallMs(): Long = FakeClock.WALL_MS
+            override fun monoNs(): Long =
+                if (readings.getAndIncrement() == 0) 0L else throw IllegalStateException()
+        }
+        val interceptor = NetworkEventInterceptor({ capture }, failsLate)
+        val client = OkHttpClient.Builder().addInterceptor(interceptor).build()
+
+        get(client, server.url("/ok")).use { assertEquals("intact", it.body!!.string()) }
+
+        assertTrue(rows.isEmpty())
+        assertEquals(1L, interceptor.droppedCount)
     }
 
     @Test
@@ -476,6 +584,18 @@ class NetworkEventInterceptorTest {
         assertEquals("${origin(url)}/late-bind", row.url)
         assertEquals(200, row.statusCode)
         assertSame(capture, NetworkEventSinkHolder.current())
+    }
+
+    @Test
+    fun instrument_isIdempotent() {
+        val builder = OkHttpClient.Builder()
+        NetworkEvents.instrument(builder)
+        NetworkEvents.instrument(builder)
+
+        val client = builder.build()
+
+        assertEquals(1, client.interceptors.count { it is NetworkEventInterceptor })
+        assertEquals(1, client.networkInterceptors.count { it === ConnectionProbe })
     }
 
     @Test
