@@ -1,6 +1,6 @@
 # 00 — Quick Start: Full Host-App Integration
 
-**Version:** 0.6.0-SNAPSHOT · **Date:** 2026-08-31 · **Status:** Current
+**Version:** 0.7.0-SNAPSHOT · **Date:** 2026-08-31 · **Status:** Current
 
 Everything a host app needs to integrate the MicroCoaching SDK, in one file, in the order you'd do it. Steps 1–4 are **required**, steps 5–7 are recommended, and [§9](#9-what-not-to-wire) lists the things you must **not** wire (they moved inside the SDK or never had an effect).
 
@@ -54,7 +54,7 @@ dependencyResolutionManagement {
 
 ```kotlin
 dependencies {
-    implementation("com.medtroniclabs.microcoaching:sdk-android:0.6.0-SNAPSHOT")
+    implementation("com.medtroniclabs.microcoaching:sdk-android:0.7.0-SNAPSHOT")
     // Optional: offline Bengali STT engine (bundles sherpa-onnx, ~30 MB)
     implementation("com.medtroniclabs.microcoaching:sdk-android-sherpa:0.4.0-SNAPSHOT")
 }

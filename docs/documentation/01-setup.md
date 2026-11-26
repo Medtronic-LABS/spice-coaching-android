@@ -1,6 +1,6 @@
 # 01 — Build Setup & Dependency Wiring
 
-**Version:** 0.6.0-SNAPSHOT · **Date:** 2026-08-31 · **Status:** Draft
+**Version:** 0.7.0-SNAPSHOT · **Date:** 2026-08-31 · **Status:** Draft
 
 How to add the MicroCoaching SDK to a SPICE 2.0 build that does not yet reference it. Every step is shown generically first, then with the exact change made in the real `spice-2.0-android` integration (the **SPICE reference**).
 
@@ -14,7 +14,7 @@ The SDK ships as **two Maven artifacts**, both consumed from your local Maven re
 
 | Artifact | Required? | Purpose |
 |---|---|---|
-| `com.medtroniclabs.microcoaching:sdk-android:0.6.0-SNAPSHOT` | **Yes** | The SDK library (chat, learn, model, telemetry, data). |
+| `com.medtroniclabs.microcoaching:sdk-android:0.7.0-SNAPSHOT` | **Yes** | The SDK library (chat, learn, model, telemetry, data). |
 | `com.medtroniclabs.microcoaching:sdk-android-sherpa:0.4.0-SNAPSHOT` | Optional | Offline Bengali speech-to-text (bundles sherpa-onnx, ~30 MB native libs). Omit if you only need English / online Bengali STT. |
 
 > **Note:** the two artifacts version independently (`sdk-android-sherpa` depends on `sdk-android`, so the combination resolves correctly). The authoritative versions live in `sdk-android/build.gradle.kts` and `sdk-android-sherpa/build.gradle.kts` — check them if the numbers here look stale.
@@ -75,7 +75,7 @@ dependencyResolutionManagement {
 ```kotlin
 // app/build.gradle.kts
 dependencies {
-    implementation("com.medtroniclabs.microcoaching:sdk-android:0.6.0-SNAPSHOT")
+    implementation("com.medtroniclabs.microcoaching:sdk-android:0.7.0-SNAPSHOT")
 
     // Optional — offline Bengali STT. Bundles sherpa-onnx (~30 MB).
     implementation("com.medtroniclabs.microcoaching:sdk-android-sherpa:0.4.0-SNAPSHOT")

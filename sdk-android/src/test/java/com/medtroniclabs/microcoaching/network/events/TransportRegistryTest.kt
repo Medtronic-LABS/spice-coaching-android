@@ -6,10 +6,14 @@ import org.junit.Test
 import java.io.File
 
 /**
- * Spec §7a: every place the SDK can open an HTTP connection is either
- * instrumented with [NetworkEvents.instrument] or registered here as a
- * deliberate non-goal or an inert reference. The scan reads the main sources
- * with comments stripped, so a new client cannot slip in unrecorded.
+ * Spec §7a: every site this scan can recognise (OkHttp builders, URL
+ * connections, ExoPlayer and OTLP builders, remote AsyncImage, ML Kit model
+ * downloads) is either instrumented with [NetworkEvents.instrument] or
+ * registered here as a deliberate non-goal or an inert reference. The scan
+ * reads the main sources with comments stripped. It does not see
+ * rememberAsyncImagePainter, Coil ImageRequest/ImageLoader, MediaItem.fromUri
+ * outside ExoPlayer.Builder, WebView, DownloadManager, or a newBuilder() whose
+ * receiver name lacks "client"; those need a manual review.
  */
 class TransportRegistryTest {
 

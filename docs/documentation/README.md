@@ -1,6 +1,6 @@
 # MicroCoaching Android SDK — SPICE Integration Guide
 
-**Version:** 0.6.0-SNAPSHOT · **Date:** 2026-08-31 · **Status:** Draft
+**Version:** 0.7.0-SNAPSHOT · **Date:** 2026-08-31 · **Status:** Draft
 
 The MicroCoaching SDK embeds on-device AI coaching for Community Health Workers (CHWs) directly inside the SPICE clinical app — chat, micro-learning, morning coaching cards, and coaching telemetry, with an offline-first on-device LLM. This guide walks the SPICE Android team through integrating the SDK into an app that does **not** yet reference it.
 
@@ -46,7 +46,7 @@ Authoritative version facts (verified against source). These supersede any older
 | Item | Value |
 |---|---|
 | groupId | `com.medtroniclabs.microcoaching` |
-| Required artifact | `sdk-android:0.6.0-SNAPSHOT` |
+| Required artifact | `sdk-android:0.7.0-SNAPSHOT` |
 | Optional artifact (offline BN STT) | `sdk-android-sherpa:0.4.0-SNAPSHOT` |
 | Consumption | Maven Local (`publishToMavenLocal` → `mavenLocal()`) |
 | `minSdk` | 23 |
@@ -74,7 +74,7 @@ dependencyResolutionManagement {
 }
 
 // 2. app/build.gradle.kts — add the dependency
-implementation("com.medtroniclabs.microcoaching:sdk-android:0.6.0-SNAPSHOT")
+implementation("com.medtroniclabs.microcoaching:sdk-android:0.7.0-SNAPSHOT")
 ```
 
 ```kotlin

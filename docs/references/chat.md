@@ -1,6 +1,6 @@
 # Chat (IT-Help) — How It Works Under the Hood
 
-**Version:** 0.6.0-SNAPSHOT · **Date:** 2026-08-31 · **Status:** Draft
+**Version:** 0.7.0-SNAPSHOT · **Date:** 2026-08-31 · **Status:** Draft
 
 How the SDK's on-device AI chat answers a CHW's question. This is the internal design behind the chat surfaces a host embeds (see [03 — UI Embedding](../documentation/03-ui-embedding.md) for the public API). It is **offline-first and on-device** — there is no online LLM fallback.
 

@@ -1,6 +1,6 @@
 # SDK Reference — How It Works Under the Hood
 
-**Version:** 0.6.0-SNAPSHOT · **Date:** 2026-08-31 · **Status:** Draft
+**Version:** 0.7.0-SNAPSHOT · **Date:** 2026-08-31 · **Status:** Draft
 
 This folder explains **how the SDK works internally** — the mechanisms behind the features. It complements the [integration guide](../documentation/README.md), which covers **how to use** the SDK from a host app.
 

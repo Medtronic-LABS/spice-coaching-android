@@ -60,11 +60,15 @@ Deeper topics: [initialization & config](docs/documentation/02-initialization.md
 The SDK records its own HTTP calls (sync, presign, asset and model downloads) in a bounded local table (500 rows, sanitised URLs, no headers or bodies). A host reads them with:
 
 ```kotlin
-suspend fun MicroCoachingSDK.getNetworkEvents(afterId: Long, limit: Int): NetworkEventsResult
-suspend fun MicroCoachingSDK.clearNetworkEvents(): NetworkEventsClearResult
+suspend fun getNetworkEvents(afterId: Long, limit: Int): NetworkEventsResult
+suspend fun clearNetworkEvents(): NetworkEventsClearResult
+
+// call as
+val page = MicroCoachingSDK.getNetworkEvents(afterId, limit)
+val cleared = MicroCoachingSDK.clearNetworkEvents()
 ```
 
-(Both are on the `MicroCoachingSDK` companion, package `com.medtroniclabs.microcoaching.sdk.diagnostics` for the result types.)
+These are `suspend` functions on the `MicroCoachingSDK` companion (result types are in `com.medtroniclabs.microcoaching.sdk.diagnostics`). Java hosts must go through `MicroCoachingSDK.Companion` and pass a `Continuation`.
 
 - **Paging.** Rows come back in ascending id order. Pass the last id you saw as `afterId`; `limit` is clamped to 1..500. `maxId` is the highest stored id (0 when empty); if it is lower than your cursor, the table was cleared, so restart from 0.
 - **Status.** `OK`, `NOT_INITIALIZED` (SDK not initialised or recorder not bound; empty list), `STORE_ERROR` (read failed; map it to an error in your layer). Neither call throws.

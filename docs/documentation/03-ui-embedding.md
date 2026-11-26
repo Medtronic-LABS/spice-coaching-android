@@ -1,6 +1,6 @@
 # 03 — UI Embedding
 
-**Version:** 0.6.0-SNAPSHOT · **Date:** 2026-08-31 · **Status:** Draft
+**Version:** 0.7.0-SNAPSHOT · **Date:** 2026-08-31 · **Status:** Draft
 
 How to surface the SDK's user-facing screens inside your app. Each surface is shown generically, then with the exact placement used in `spice-2.0-android` (the **SPICE reference**).
 

@@ -1,6 +1,6 @@
 # 02 — Initialization & Configuration
 
-**Version:** 0.6.0-SNAPSHOT · **Date:** 2026-08-31 · **Status:** Draft
+**Version:** 0.7.0-SNAPSHOT · **Date:** 2026-08-31 · **Status:** Draft
 
 How to construct, configure, and re-build the `MicroCoachingSDK` singleton, plus the full `MicroCoachingConfig` reference.
 

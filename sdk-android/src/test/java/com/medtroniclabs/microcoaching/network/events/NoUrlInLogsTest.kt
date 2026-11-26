@@ -11,8 +11,9 @@ import org.junit.Test
  * message is printed with the stack) into a log call. Presigned URLs carry
  * signatures and release builds keep these logs.
  *
- * Only the three files in [scanned] are checked, not the rest of the SDK; adding
- * a file to the list is how its logging comes under this rule.
+ * Only the files in [scanned] (the three above plus every main file under
+ * `network/events/`) are checked, not the rest of the SDK; adding a file to the
+ * list is how its logging comes under this rule.
  *
  * Allowed in a log call: fixed text, a status code, the exception class name
  * and `UrlSanitizer.sanitize(url)`.
@@ -25,10 +26,11 @@ class NoUrlInLogsTest {
         "$root/ai/download/ResumableHttpDownloader.kt",
         "$root/network/MediaUrlResolver.kt",
         "$root/data/asset/AssetCache.kt",
-    )
+    ) + (File("$root/network/events").listFiles { f -> f.extension == "kt" }?.map { it.path }?.sorted() ?: emptyList())
 
     @Test
     fun logCallsDoNotLeakUrlsBodiesOrMessages() {
+        assertTrue("network/events files missing from the scan", scanned.size > 3)
         val violations = scanned.flatMap { path ->
             val file = File(path)
             assertTrue("missing $path (cwd=${File(".").absolutePath})", file.exists())

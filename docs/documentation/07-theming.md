@@ -1,6 +1,6 @@
 # 07 — Theming & Brand Customization
 
-**Version:** 0.6.0-SNAPSHOT · **Date:** 2026-08-31 · **Status:** Draft
+**Version:** 0.7.0-SNAPSHOT · **Date:** 2026-08-31 · **Status:** Draft
 
 The SDK ships a SPICE-blue light theme. A host app can replace the brand — colours and
 type scale — so SDK screens match its own identity. This doc covers how, what is
